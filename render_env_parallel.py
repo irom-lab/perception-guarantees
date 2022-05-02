@@ -5,9 +5,13 @@ Modified from iGibson/igibson/examples/objects/load_objects.py.
 
 # Things to do:
 
-# Setup training; add residual style model to 3DETR decoder
+# Setup training:
+# - Add residual style model to 3DETR decoder
+# - Figure out loss function for bounding boxes based on GIoU
 
-
+# Notes:
+# - If I need to speed up training, I can use features just from the query that corresponds to an object
+# - Bounding boxes that gibson provides are slightly larger than they need to be
 
 import logging
 import os
@@ -21,11 +25,11 @@ import itertools
 import trimesh
 import yaml
 
-from pc_utils import write_ply_3DETR, write_ply_3DETR_rgb
+from utils.pc_util import preprocess_point_cloud, write_ply, write_ply_rgb, pc_cam_to_gibson, write_oriented_bbox
 
 import igibson
 from igibson.envs.igibson_env import iGibsonEnv
-from igibson.external.pybullet_tools.utils import quat_from_euler
+from igibson.external.pybullet_tools.utils import quat_from_euler, euler_from_quat
 from igibson.objects.articulated_object import URDFObject
 from igibson.objects.ycb_object import YCBObject
 from igibson.render.mesh_renderer.mesh_renderer_cpu import MeshRendererSettings
@@ -42,7 +46,9 @@ from igibson.utils.utils import let_user_pick, parse_config, quat_pos_to_mat
 def render_env(seed):
     """
     Load an object (chair) into an empty scene in a random location and render different camera views.
-    Coordinate system of scene: +X (right), +Y (forward), +Z (up)
+    Coordinate system of scene:  +X (right), +Y (forward), +Z (up)
+    Coordinate system of camera: +X (right), +Y (up), +Z (backwards)
+    Coordinate system for 3DETR: same as scene
     """
 
     ########################################
@@ -56,10 +62,12 @@ def render_env(seed):
     y_lims = [-10, -4]
 
     obs_x_lims = x_lims
-    obs_y_lims = [y_lims[0]+1, y_lims[1]-1]
+    obs_y_lims = [y_lims[0]+1, y_lims[1]-1] # Obstacles are not placed right at the boundaries
 
     x_grid = np.linspace(-2,2,10)
-    y_grid = np.linspace(-10, -10+6, 20)
+    y_grid = np.linspace(-10, -10+6,20)
+
+    num_pc_points = 40000 # Number of points to sample in each point cloud
     ########################################
 
 
@@ -103,7 +111,6 @@ def render_env(seed):
     obj_x_loc = np.random.uniform(obs_x_lims[0], obs_x_lims[1])
     obj_y_loc = np.random.uniform(obs_y_lims[0], obs_y_lims[1])
     obj_z_loc = 0.5
-
     obj_yaw = np.random.uniform(-180, 180)
 
     objects_to_load = {
@@ -152,7 +159,10 @@ def render_env(seed):
                 fit_avg_dim_volume=True,
                 texture_randomization=False,
                 overwrite_inertial=True,
+                merge_fixed_links=False
             )
+
+
             s.import_object(simulator_obj)
             simulator_obj.set_position_orientation(obj["pos"], quat_from_euler(obj["orn"]))
 
@@ -170,14 +180,15 @@ def render_env(seed):
 
         ########################################
         # Save ground truth bounding box
-        bbox_center, bbox_orn, bbox_bf_extent, bbox_wf_extent = simulator_obj.get_base_aligned_bounding_box(visual=(not headless))
-        
+        bbox_center, bbox_orn, bbox_bf_extent, bbox_wf_extent = simulator_obj.get_base_aligned_bounding_box(visual=True)
+
         # Get vertex positions in bbox reference frame
         bbox_frame_vertex_positions = np.array(list(itertools.product((1, -1), repeat=3))) * (bbox_bf_extent / 2)
 
         # Convert to world frame
         bbox_transform = quat_pos_to_mat(bbox_center, bbox_orn)
         bbox_world_frame_vertex_positions = trimesh.transformations.transform_points(bbox_frame_vertex_positions, bbox_transform)
+
         ########################################
 
 
@@ -207,16 +218,27 @@ def render_env(seed):
                 points = pc.reshape((pc.shape[0]*pc.shape[1],4))[:,0:3]
 
                 # Get rid of points that are too far away
-                inds_close = (points[:,2] > -cam_dist_thresh)
+                inds_good1 = (points[:,2] > -cam_dist_thresh)
 
-                points = points[inds_close, :]
-                # colors = colors[inds_close, :]
+                # Get rid of points that are too close
+                cam_near_dist_thresh = 0.1
+                inds_good2 = (points[:,2] < -cam_near_dist_thresh)
 
-                # write_ply_3DETR(points, "gibson.ply")
-                # write_ply_3DETR_rgb(points, colors, "gibson.obj")
+                inds_good = (inds_good1 & inds_good2)
+
+                points = points[inds_good, :]
+                # colors = colors[inds_good, :]
+
+                # Convert from camera frame to world frame
+                points = pc_cam_to_gibson(points, camera_pos)
+
+
+                # Preprocess point cloud (random sampling of points)
+                points = preprocess_point_cloud(points, num_pc_points)
 
                 # Save point cloud from this view
                 point_clouds[ind] = points
+
 
                 # Update index
                 ind += 1
@@ -227,25 +249,57 @@ def render_env(seed):
         s.disconnect()
 
 
-    return cam_positions, point_clouds, bbox_world_frame_vertex_positions
+    return {"cam_positions": cam_positions, # Camera positions in Gibson world frame
+            "point_clouds": point_clouds, # Point clouds in Gibson world frame
+            "bbox_world_frame_vertices": bbox_world_frame_vertex_positions} # Bounding boxes in Gibson world frame
 
 
 def main(raw_args=None):
 
+    ##################################################################
+    # Number of environments
+    num_envs = 20
+
     # Number of parallel threads
-    num_parallel = 2
+    num_parallel = 12
+    ##################################################################
 
-    # _, _ = render_env(seed=100)
+    # _, _, _ = render_env(seed=0)
 
-    with Pool(num_parallel) as p:
+    ##################################################################
+    t_start = time.time()
+    pool = Pool(num_parallel) # Number of parallel processes
+    seeds = range(num_envs) # Seeds to use for the different processes
+    results = pool.map_async(render_env, seeds) # Compute results
+    pool.close()
+    pool.join()
+    results = results.get()
+    t_end = time.time()
+    print("Time to generate results: ", t_end - t_start)
+    ##################################################################
 
-        # Pack inputs to use with map
-        inputs = range(num_parallel) # Seeds to use for each thread
 
-        # Run in parallel
-        outputs = p.map(render_env, inputs)
+    ##################################################################
+    # Save data
+    np.savez("training_data_raw.npz", data=results)
+    ##################################################################
 
-    # ipy.embed()
+
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
