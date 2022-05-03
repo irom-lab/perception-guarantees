@@ -43,9 +43,8 @@ def main(raw_args=None):
 
 	###################################################################
 	# Initialize NN model
-	ipy.embed()
-	num_in = num_rays
-	num_out = num_primitives
+	num_in = dataset.feature_dims[0]*dataset.feature_dims[1]
+	num_out = 8*3
 	model = MLPModel(num_in, num_out)
 	# model.to(device)
 	###################################################################
@@ -78,10 +77,11 @@ def main(raw_args=None):
 	        # Zero the gradients
 	        optimizer.zero_grad()
 
-	        ipy.embed()
 
 	        # Perform forward pass
 	        outputs = model(inputs)
+
+	        ipy.embed()
 
 	        # Compute loss
 	        loss = loss_function(outputs, targets)
@@ -105,7 +105,7 @@ def main(raw_args=None):
 	    print('Training complete.')
 
 	# Save model
-	torch.save(model.state_dict(), "lbi/training/models/trained_model")
+	torch.save(model.state_dict(), "trained_models/perception_model")
 	if verbose:
 	    print('Saved trained model.')
 
@@ -116,3 +116,4 @@ def main(raw_args=None):
 # (rather than when imported)
 if __name__ == '__main__':
     main() 
+
