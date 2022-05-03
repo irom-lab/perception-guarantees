@@ -73,6 +73,10 @@ if __name__=='__main__':
 
 
     ###########################################################################
+    # Initialize data structure for ground truth bounding boxes for each environment
+    bboxes_ground_truth = torch.zeros(num_envs, 8, 3)
+
+
     # Initialize outputs
     model_outputs_all = {
         "sem_cls_logits": torch.zeros(num_envs, num_cam_positions, args.nqueries, dataset_config.num_semcls+1),
@@ -98,6 +102,11 @@ if __name__=='__main__':
 
         print("Env: ", env)
 
+        #####################################################
+        # Save ground truth bounding box for this environment
+        bboxes_ground_truth[env,:,:] = torch.tensor(data[env]["bbox_world_frame_vertices"])
+        #####################################################
+
         for i in range(num_batches):
 
             # Read point clouds    
@@ -115,7 +124,7 @@ if __name__=='__main__':
 
 
             #####################################
-            # Save outputs
+            # Save outputs from model
             model_outputs_all["sem_cls_logits"][env,batch_inds,:,:] = outputs["outputs"]["sem_cls_logits"].detach().cpu()
             model_outputs_all["center_normalized"][env,batch_inds,:,:] = outputs["outputs"]["center_normalized"].detach().cpu()
             model_outputs_all["center_unnormalized"][env,batch_inds,:,:] = outputs["outputs"]["center_unnormalized"].detach().cpu()
@@ -132,7 +141,6 @@ if __name__=='__main__':
             #####################################
 
 
-
     t_end = time.time()
     print("Time: ", t_end - t_start)
     ###########################################################################
@@ -140,62 +148,12 @@ if __name__=='__main__':
 
 
     ###########################################################################
-    # Save processed data
+    # Save processed feature data
     torch.save(model_outputs_all, "features.pt")
+
+
+    # Save ground truth bounding boxes
+    torch.save(bboxes_ground_truth, "bbox_labels.pt")
     ###########################################################################
-
-
-    ipy.embed()
-
-
-
-
-    # Read point cloud    
-    env = 0
-    loc_ind = -1
-    point_cloud = data[env]["point_clouds"][loc_ind]
-
-    pc_ply = tuple(map(tuple, point_cloud))
-    pc_ply = list(pc_ply)
-    write_ply(pc_ply, "gibson.ply")
-
-    ipy.embed()
-
-    pc = np.array(point_cloud)
-    pc = pc.reshape((batch_size, num_pc_points, 3))
-    pc_all = torch.from_numpy(pc).to(device)
-    pc_min_all = pc_all.min(1).values
-    pc_max_all = pc_all.max(1).values
-    inputs = {'point_clouds': pc_all, 'point_cloud_dims_min': pc_min_all, 'point_cloud_dims_max': pc_max_all}
-
-    # Run through pre-trained 3DETR model
-    outputs = model(inputs)
-
-
-
-# debug = False
-# if debug:
-
-#     # Save ply file from point cloud and bounding box
-#     points = outputs[0]["point_clouds"][0]
-#     pc = tuple(map(tuple, points))
-#     pc = list(pc)
-#     write_ply(pc, "gibson.ply")
-
-#     scene_bbox = np.concatenate((bbox_center, bbox_bf_extent, np.array([euler_from_quat(bbox_orn)[2]])))
-#     scene_bbox = scene_bbox.reshape((1,7))
-#     write_oriented_bbox(scene_bbox, "gibson_bbox.ply")
-#     # write_ply_rgb(points, colors, "gibson.obj")
-
-#     # ipy.embed()
-
-
-# # Write bbox
-# num_objects = write_bbox_ply_from_outputs(outputs, "output_bboxes.ply", prob_threshold=0.5)
-# print(" ")
-# print("Number of objects detected: ", num_objects)
-# print(" ")
-
-
 
 

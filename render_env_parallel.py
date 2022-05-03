@@ -6,7 +6,7 @@ Modified from iGibson/igibson/examples/objects/load_objects.py.
 # Things to do:
 
 # Setup training:
-# - Add residual style model to 3DETR decoder
+# - Figure out correct MLP model dimensions
 # - Figure out loss function for bounding boxes based on GIoU
 
 # Notes:
@@ -255,6 +255,17 @@ def render_env(seed):
 
 
 def main(raw_args=None):
+    '''
+    Generates data in the following format:
+    results: List of length num_envs
+        results[i]: data corresponding to environment i; dictionary with "cam_positions", 
+        "point_clouds", "bbox_world_frame_vertices"
+            cam_positions: List of length num_views; each element corresponds to (x,y) 
+                            position of camera in Gibson world frame 
+            point_clouds: List of length num_views; each element corresponds to point cloud
+                            in Gibson world frame (taken from corresponding cam_position).
+            bbox_world_frame_vertices: (8,3) array of vertices of bounding box of object in Gibson world frame.
+    '''
 
     ##################################################################
     # Number of environments
