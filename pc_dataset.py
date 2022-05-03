@@ -1,10 +1,13 @@
 import torch
 from torch.utils.data import Dataset
+import IPython as ipy
 
 class PointCloudDataset(Dataset):
     def __init__(self, features_file, bbox_labels_file):
         self.features = torch.load(features_file)
         self.bbox_labels = torch.load(bbox_labels_file)
+
+        self.feature_dims = self.features["box_features"].shape[2:]
 
     def __len__(self):
         return self.bbox_labels.shape[0]
