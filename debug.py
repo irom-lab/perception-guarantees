@@ -22,7 +22,7 @@ ROOT_DIR = BASE_DIR
 sys.path.append(os.path.join(ROOT_DIR, 'utils'))
 sys.path.append(os.path.join(ROOT_DIR, 'pretrained'))
 
-from pc_util import preprocess_point_cloud, write_ply, read_ply, write_bbox_ply_from_outputs
+from pc_util import write_bbox, point_cloud_to_bbox, preprocess_point_cloud, write_ply, read_ply, write_bbox_ply_from_outputs
 from make_args import make_args_parser
 
 
@@ -65,13 +65,15 @@ if __name__=='__main__':
 
     ###########################################################################
     # Read point cloud    
-    env = 0
+    env = 5
     loc_ind = 0 # -1
     point_cloud = data[env]["point_clouds"][loc_ind]
 
     pc_ply = tuple(map(tuple, point_cloud.reshape(num_pc_points,3)))
     pc_ply = list(pc_ply)
     write_ply(pc_ply, "gibson.ply")
+    # write_ply_rgb(points, colors, "gibson.obj")
+
 
     pc = torch.from_numpy(point_cloud).to(device)
     pc_min = pc.min(1).values
@@ -81,19 +83,23 @@ if __name__=='__main__':
     # Run through pre-trained 3DETR model
     outputs = model(inputs)
 
+    ipy.embed()
+
     # Write bbox from outputs
     num_objects = write_bbox_ply_from_outputs(outputs, "output_bboxes.ply", prob_threshold=0.1)
     print(" ")
     print("Number of objects detected: ", num_objects)
     print(" ")
 
-
-
+    # Write ground truth bbox
+    bbox_world_frame = data[env]["bbox_world_frame_vertices"]
+    scene_bbox = point_cloud_to_bbox(bbox_world_frame)
+    scene_bbox = scene_bbox.reshape((1,6))
+    write_bbox(scene_bbox, "bbox_ground_truth.ply")
 
 #     scene_bbox = np.concatenate((bbox_center, bbox_bf_extent, np.array([euler_from_quat(bbox_orn)[2]])))
 #     scene_bbox = scene_bbox.reshape((1,7))
 #     write_oriented_bbox(scene_bbox, "gibson_bbox.ply")
-#     # write_ply_rgb(points, colors, "gibson.obj")
 
 
 

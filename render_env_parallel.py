@@ -6,11 +6,20 @@ Modified from iGibson/igibson/examples/objects/load_objects.py.
 # Things to do:
 
 # Setup training:
-# - Figure out correct MLP model dimensions
-# - Figure out loss function for bounding boxes based on GIoU
+#    - Debug why loss function is negative for: ll = box_loss_tensor(boxes_gt+0.1, boxes_gt, 1, 1, 1)
+#       - Run train.py and run the above line
+#    - Put back jit for loss function.
+#    - Implement final reduction to scalar in loss function.
+#    - Choose weights for loss terms.
+#    - May need to handle case where object is not visible in a special way.
 
 # Notes:
 # - If I need to speed up training, I can use features just from the query that corresponds to an object
+# - Code currently assumes that there is only one object in environment
+#       - render_env_parallel.py will need to output multiple bounding boxes for multiple objects
+#       - compute_features.py will need a small modification to save multiple bounding boxes.
+#       - model_perception.py will need to output multiple bounding boxes.
+#       - loss function will need to handle multiple bounding boxes.
 # - Bounding boxes that gibson provides are slightly larger than they need to be
 
 import logging
@@ -25,7 +34,7 @@ import itertools
 import trimesh
 import yaml
 
-from utils.pc_util import preprocess_point_cloud, write_ply, write_ply_rgb, pc_cam_to_gibson, write_oriented_bbox
+from utils.pc_util import preprocess_point_cloud, write_ply, write_ply_rgb, pc_cam_to_gibson, write_oriented_bbox, pc_to_axis_aligned_rep
 
 import igibson
 from igibson.envs.igibson_env import iGibsonEnv
@@ -41,7 +50,6 @@ from igibson.scenes.gibson_indoor_scene import StaticIndoorScene
 from igibson.simulator import Simulator
 from igibson.utils.assets_utils import get_ig_avg_category_specs, get_ig_category_path, get_ig_model_path
 from igibson.utils.utils import let_user_pick, parse_config, quat_pos_to_mat
-
 
 def render_env(seed):
     """
@@ -180,7 +188,8 @@ def render_env(seed):
 
         ########################################
         # Save ground truth bounding box
-        bbox_center, bbox_orn, bbox_bf_extent, bbox_wf_extent = simulator_obj.get_base_aligned_bounding_box(visual=True)
+        xy_aligned=True # Aligned with x-y plane if True
+        bbox_center, bbox_orn, bbox_bf_extent, bbox_wf_extent = simulator_obj.get_base_aligned_bounding_box(visual=True, xy_aligned=xy_aligned)
 
         # Get vertex positions in bbox reference frame
         bbox_frame_vertex_positions = np.array(list(itertools.product((1, -1), repeat=3))) * (bbox_bf_extent / 2)
@@ -189,6 +198,8 @@ def render_env(seed):
         bbox_transform = quat_pos_to_mat(bbox_center, bbox_orn)
         bbox_world_frame_vertex_positions = trimesh.transformations.transform_points(bbox_frame_vertex_positions, bbox_transform)
 
+        # Get axis-aligned representation
+        bbox_world_frame_aligned = pc_to_axis_aligned_rep(bbox_world_frame_vertex_positions)
         ########################################
 
 
@@ -232,13 +243,11 @@ def render_env(seed):
                 # Convert from camera frame to world frame
                 points = pc_cam_to_gibson(points, camera_pos)
 
-
                 # Preprocess point cloud (random sampling of points)
                 points = preprocess_point_cloud(points, num_pc_points)
 
                 # Save point cloud from this view
                 point_clouds[ind] = points
-
 
                 # Update index
                 ind += 1
@@ -251,7 +260,8 @@ def render_env(seed):
 
     return {"cam_positions": cam_positions, # Camera positions in Gibson world frame
             "point_clouds": point_clouds, # Point clouds in Gibson world frame
-            "bbox_world_frame_vertices": bbox_world_frame_vertex_positions} # Bounding boxes in Gibson world frame
+            "bbox_world_frame_vertices": bbox_world_frame_vertex_positions, # Bounding boxes in Gibson world frame
+            "bbox_world_frame_aligned": bbox_world_frame_aligned} # Axis-aligned bounding box representation
 
 
 def main(raw_args=None):
@@ -265,11 +275,12 @@ def main(raw_args=None):
             point_clouds: List of length num_views; each element corresponds to point cloud
                             in Gibson world frame (taken from corresponding cam_position).
             bbox_world_frame_vertices: (8,3) array of vertices of bounding box of object in Gibson world frame.
+            bbox_world_frame_aligned: (2,3) array of two vertices corresponding to axis-aligned bounding box.
     '''
 
     ##################################################################
     # Number of environments
-    num_envs = 20
+    num_envs = 10
 
     # Number of parallel threads
     num_parallel = 12

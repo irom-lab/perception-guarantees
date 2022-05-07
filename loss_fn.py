@@ -1,0 +1,92 @@
+'''
+Implements loss function for box prediction.
+'''
+
+import torch
+import numpy as np
+import IPython as ipy
+
+
+def box_loss_tensor(
+    corners_pred: torch.Tensor,
+    corners_gt: torch.Tensor,
+    w1: torch.Tensor,
+    w2: torch.Tensor,
+    w3: torch.Tensor
+):
+    """
+    Input:
+        corners_pred: torch Tensor (B, K, 2, 3). Predicted.
+        corners_gt: torch Tensor (B, K, 2, 3). Ground truth.
+        Assumes that all boxes are axis-aligned.
+        w1, w2, w3: weights on the three loss terms.
+    Returns:
+        B x K x 1  matrix of losses.
+    """
+    assert len(corners_gt.shape) == 4
+    assert len(corners_pred.shape) == 4
+    assert corners_gt.shape[2] == 2
+    assert corners_gt.shape[3] == 3
+    assert corners_gt.shape[0] == corners_pred.shape[0]
+    assert corners_gt.shape[1] == corners_pred.shape[1]
+    assert corners_gt.shape[2] == corners_pred.shape[2]
+    assert corners_gt.shape[3] == corners_pred.shape[3]
+
+    B, K = corners_gt.shape[0], corners_gt.shape[1]
+
+    # Ensure that corners of predicted bboxes satisfy basic constraints
+    corners1_pred = torch.min(corners_pred[:, :, 0, :][:,:,None,:], corners_pred[:, :, 1, :][:,:,None,:])
+    corners2_pred = torch.max(corners_pred[:, :, 0, :][:,:,None,:], corners_pred[:, :, 1, :][:,:,None,:])
+    corners_pred = torch.cat((corners1_pred, corners2_pred), 2)
+
+
+    # Calculate volume of ground truth and predicted boxes
+    vol_gt = torch.prod(corners_gt[:, :, 1, :][:,:,None,:] - corners_gt[:, :, 0, :][:,:,None,:], 3)
+    vol_pred = torch.prod(corners_pred[:, :, 1, :][:,:,None,:] - corners_pred[:, :, 0, :][:,:,None,:], 3)
+
+    # Calculate intersection between predicted and ground truth boxes
+    corners1_int = torch.max(corners1_pred, corners_gt[:,:,0,:][:,:,None,:])
+    corners2_int = torch.min(corners2_pred, corners_gt[:,:,1,:][:,:,None,:])
+    corners_int_diff = (corners2_int - corners1_int).clamp(min=0)
+    vol_int = torch.prod(corners_int_diff, 3)
+
+    # Find smallest box that encloses predicted and ground truth boxes
+    EPS = 1e-6
+    corners1_enclosing = torch.min(corners1_pred, corners_gt[:,:,0,:][:,:,None,:])
+    corners2_enclosing = torch.max(corners2_pred, corners_gt[:,:,1,:][:,:,None,:])
+    corners_enclosing_diff = (corners2_int - corners1_int)
+    vol_enclosing = torch.prod(corners_enclosing_diff, 3).clamp(min=EPS)
+
+    # Compute volume of GT\PRED and PRED\GT
+    vol_gt_minus_pred = vol_gt - vol_int
+    vol_pred_minus_gt = vol_pred - vol_int
+
+    # Compute volume of union
+    vol_union = (vol_pred + vol_gt - vol_int).clamp(min=EPS)
+
+    # Now compute all the terms in the loss
+    l1 = vol_gt_minus_pred/vol_union
+    l2 = vol_pred_minus_gt/vol_union
+    l3 = (vol_enclosing - vol_union)/vol_enclosing
+
+    losses = w1*l1 + w2*l2 + w3*l3
+
+    losses = losses.mean()
+
+    return losses
+
+# box_loss_tensor_jit = torch.jit.script(box_loss_tensor)
+
+# if __name__=='__main__':
+#
+#     bboxes = np.load("test_bboxes.npz")
+#     bbox1 = torch.tensor(bboxes["bbox1"])
+#     bbox2 = torch.tensor(bboxes["bbox2"])
+#
+#     # ipy.embed()
+#     # box_loss_tensor(bbox1, bbox2, 1, 1, 1)
+#
+#     bboxes1 = torch.cat((bbox1, bbox2), 0)
+#     bboxes2 = torch.cat((bbox2, bbox1), 0)
+#     box_loss_tensor(bboxes1, bboxes2, 1, 1, 1)
+

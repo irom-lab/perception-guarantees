@@ -2,14 +2,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import IPython as ipy
+import numpy as np
 
 
 class MLPModel(nn.Module):
     def __init__(self, num_in, num_out):
         super(MLPModel, self).__init__()
 
-        self.linear1 = nn.Linear(num_in, 50) 
-        self.linear2 = nn.Linear(50, num_out) # num_out
+        self.linear1 = nn.Linear(num_in, 50)
+        self.linear2 = nn.Linear(50, np.prod(num_out))
+        self.num_out = num_out
 
     def forward(self, x):
         '''
@@ -24,5 +26,7 @@ class MLPModel(nn.Module):
         x = F.relu(x)
         x = self.linear2(x)
         x = F.relu(x) # softmax(x, dim=1)
+
+        x = x.view((x.shape[0], x.shape[1], self.num_out[0], self.num_out[1]))
 
         return x
