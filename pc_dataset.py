@@ -4,10 +4,21 @@ import IPython as ipy
 
 class PointCloudDataset(Dataset):
     def __init__(self, features_file, bbox_labels_file):
-        self.features = torch.load(features_file)
-        self.bbox_labels = torch.load(bbox_labels_file)
 
+        # Point cloud features from 3DETR
+        self.features = torch.load(features_file)
         self.feature_dims = self.features["box_features"].shape[2:]
+
+        # Prediction of axis-aligned box from 3DETR
+        self.bbox_3detr = self.features["box_axis_aligned"]
+
+        # Repeat grounth truth labels for each robot viewpoint location
+        num_locations = self.features["box_features"].shape[1]
+        self.bbox_labels = torch.load(bbox_labels_file)
+        sb = self.bbox_labels.shape
+        self.bbox_labels = self.bbox_labels.view((sb[0], 1, sb[1], sb[2]))
+        self.bbox_labels = self.bbox_labels.expand(-1, num_locations, -1, -1)
+
 
     def __len__(self):
         return self.bbox_labels.shape[0]
@@ -24,9 +35,8 @@ class PointCloudDataset(Dataset):
         # Get features
         features = self.features["box_features"][idx, :, :, :]
 
-        # Get label
-        label = {
-            "bbox_ground_truth": self.bbox_labels[idx, :, :]
-            }
+        # Get label (residual between
+        labels = {'bboxes_gt': self.bbox_labels[idx, :, :, :],
+                'bboxes_3detr': self.bbox_3detr[idx, :, :, :]}
 
-        return features, label
+        return features, labels

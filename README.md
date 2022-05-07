@@ -22,3 +22,13 @@ Install plyfile:
 pip install plyfile
 ```
 
+Install Cython:
+```
+conda install cython
+```
+
+Compile cythonized version of loss function:
+```
+cd utils && python -E cython_compile.py build_ext --inplace
+```
+

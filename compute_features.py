@@ -22,7 +22,7 @@ ROOT_DIR = BASE_DIR
 sys.path.append(os.path.join(ROOT_DIR, 'utils'))
 sys.path.append(os.path.join(ROOT_DIR, 'pretrained'))
 
-from pc_util import preprocess_point_cloud, read_ply, write_bbox_ply_from_outputs
+from pc_util import preprocess_point_cloud, read_ply, write_bbox_ply_from_outputs, pc_to_axis_aligned_rep
 from make_args import make_args_parser
 
 
@@ -75,6 +75,7 @@ if __name__=='__main__':
     ###########################################################################
     # Initialize data structure for ground truth bounding boxes for each environment
     bboxes_ground_truth = torch.zeros(num_envs, 8, 3)
+    bboxes_ground_truth_aligned = torch.zeros(num_envs, 2, 3)
 
 
     # Initialize outputs
@@ -91,7 +92,8 @@ if __name__=='__main__':
         "objectness_prob": torch.zeros(num_envs, num_cam_positions, args.nqueries),
         "sem_cls_prob": torch.zeros(num_envs, num_cam_positions, args.nqueries, dataset_config.num_semcls),
         "box_corners": torch.zeros(num_envs, num_cam_positions, args.nqueries, 8, 3),
-        "box_features": torch.zeros(num_envs, num_cam_positions, args.nqueries, args.dec_dim)
+        "box_features": torch.zeros(num_envs, num_cam_positions, args.nqueries, args.dec_dim),
+        "box_axis_aligned": torch.zeros(num_envs, num_cam_positions, 2, 3),
     }
     ###########################################################################
 
@@ -105,11 +107,12 @@ if __name__=='__main__':
         #####################################################
         # Save ground truth bounding box for this environment
         bboxes_ground_truth[env,:,:] = torch.tensor(data[env]["bbox_world_frame_vertices"])
+        bboxes_ground_truth_aligned[env,:,:] = torch.tensor(data[env]["bbox_world_frame_aligned"])
         #####################################################
 
         for i in range(num_batches):
 
-            # Read point clouds    
+            # Read point clouds
             batch_inds = slice(i*batch_size, (i+1)*batch_size)
             point_clouds = data[env]["point_clouds"][batch_inds]
             pc = np.array(point_clouds)
@@ -138,6 +141,14 @@ if __name__=='__main__':
             model_outputs_all["sem_cls_prob"][env,batch_inds,:,:] = outputs["outputs"]["sem_cls_prob"].detach().cpu()
             model_outputs_all["box_corners"][env,batch_inds,:,:] = outputs["outputs"]["box_corners"].detach().cpu()
             model_outputs_all["box_features"][env,batch_inds,:,:] = outputs["box_features"].detach().cpu()
+
+            # Compute axis-aligned bbox representation of most prominent bbox from prediction
+            bbox_pred_points = outputs["outputs"]["box_corners"].detach().cpu()
+            obj_prob = outputs["outputs"]["objectness_prob"].detach().cpu()
+            box_inds = obj_prob.argmax(1) # Indices corresponding to most prominent box for each batch
+            bbox_pred_points = bbox_pred_points[range(batch_size), box_inds, :, :]
+
+            model_outputs_all["box_axis_aligned"][env,batch_inds,:,:] = torch.tensor(pc_to_axis_aligned_rep(bbox_pred_points.numpy()))
             #####################################
 
 
@@ -153,7 +164,7 @@ if __name__=='__main__':
 
 
     # Save ground truth bounding boxes
-    torch.save(bboxes_ground_truth, "bbox_labels.pt")
+    torch.save(bboxes_ground_truth_aligned, "bbox_labels.pt")
     ###########################################################################
 
 

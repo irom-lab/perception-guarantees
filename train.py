@@ -9,9 +9,8 @@ import IPython as ipy
 import argparse 
 from pc_dataset import PointCloudDataset
 from models.model_perception import MLPModel
-
-
-
+from loss_fn import * # box_loss_tensor
+# import loss_fn
 
 def main(raw_args=None):
 
@@ -28,8 +27,9 @@ def main(raw_args=None):
 	###################################################################
 	# Initialize dataset and dataloader
 	dataset = PointCloudDataset("features.pt", "bbox_labels.pt")
+	batch_size = 5
 
-	params = {'batch_size': 5,
+	params = {'batch_size': batch_size,
 				'shuffle': True}
 	           # 'num_workers': 12}
 	dataloader = DataLoader(dataset, **params)
@@ -38,15 +38,15 @@ def main(raw_args=None):
 	###################################################################
 	# Device
 	# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-	device = 'cpu'
+	device = torch.device('cuda') # cpu'
 	###################################################################
 
 	###################################################################
 	# Initialize NN model
 	num_in = dataset.feature_dims[0]*dataset.feature_dims[1]
-	num_out = 8*3
+	num_out = (2,3)
 	model = MLPModel(num_in, num_out)
-	# model.to(device)
+	model.to(device)
 	###################################################################
 
 
@@ -64,41 +64,44 @@ def main(raw_args=None):
 	num_epochs = 5000 
 	for epoch in range(0, num_epochs):
 
-	    current_loss = 0.0
-	    num_batches = 0
+		current_loss = 0.0
+		num_batches = 0
 
-	    # Iterate over the DataLoader for training data
-	    for i, data in enumerate(dataloader, 0):
+		# Iterate over the DataLoader for training data
+		for i, data in enumerate(dataloader, 0):
 
-	        # Get inputs
-	        inputs, targets = data
-	        # inputs, targets = inputs.to(device), targets.to(device)
+			# Get inputs
+			inputs, targets = data
+			inputs = inputs.to(device)
+			boxes_3detr = targets["bboxes_3detr"].to(device)
+			boxes_gt = targets["bboxes_gt"].to(device)
 
-	        # Zero the gradients
-	        optimizer.zero_grad()
+
+			# Zero the gradients
+			optimizer.zero_grad()
 
 
-	        # Perform forward pass
-	        outputs = model(inputs)
+			# Perform forward pass
+			outputs = model(inputs)
 
-	        ipy.embed()
+			# Compute loss
+			# loss = box_loss_tensor_jit(outputs + boxes_3detr, boxes_gt, torch.tensor(1).to(device), torch.tensor(1).to(device), torch.tensor(1).to(device))
 
-	        # Compute loss
-	        loss = loss_function(outputs, targets)
+			ipy.embed() # ll = box_loss_tensor(boxes_gt+0.1, boxes_gt, 1, 1, 1)
 
-	        # Perform backward pass
-	        loss.backward()
+			# Perform backward pass
+			loss.backward()
 
-	        # Perform optimization
-	        optimizer.step()
+			# Perform optimization
+			optimizer.step()
 
-	        # Update current loss
-	        current_loss += loss.item()
-	        num_batches += 1
+			# Update current loss
+			current_loss += loss.item()
+			num_batches += 1
 
 	    # Print 
-	    if verbose and (epoch % 1000 == 0):
-	        print("epoch: ", epoch, "; loss: ", current_loss/num_batches)
+		if verbose and (epoch % 10 == 0):
+			print("epoch: ", epoch, "; loss: ", current_loss/num_batches)
 
 	# Process is complete.
 	if verbose:
