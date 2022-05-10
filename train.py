@@ -9,8 +9,7 @@ import IPython as ipy
 import argparse 
 from pc_dataset import PointCloudDataset
 from models.model_perception import MLPModel
-from loss_fn import * # box_loss_tensor
-# import loss_fn
+from loss_fn import *
 
 def main(raw_args=None):
 
@@ -27,10 +26,10 @@ def main(raw_args=None):
 	###################################################################
 	# Initialize dataset and dataloader
 	dataset = PointCloudDataset("features.pt", "bbox_labels.pt")
-	batch_size = 5
+	batch_size = 10
 
 	params = {'batch_size': batch_size,
-				'shuffle': True}
+				'shuffle': False} # True
 	           # 'num_workers': 12}
 	dataloader = DataLoader(dataset, **params)
 	###################################################################
@@ -49,22 +48,25 @@ def main(raw_args=None):
 	model.to(device)
 	###################################################################
 
-
-	###################################################################
-	# Define the loss function
-	# loss_function = # TODO
-	###################################################################
-
 	###################################################################
 	# Define optimizer
 	optimizer = torch.optim.Adam(model.parameters(), lr=1e-3) # , weight_decay=1e-5)
 	###################################################################
+
+	###################################################################
+	# Choose loss weights
+	w1 = torch.tensor(1.0).to(device)
+	w2 = torch.tensor(0.1).to(device)
+	w3 = torch.tensor(1.0).to(device)
+	###################################################################
+
 
 	# Run the training loop
 	num_epochs = 5000 
 	for epoch in range(0, num_epochs):
 
 		current_loss = 0.0
+		current_loss_true = 0.0
 		num_batches = 0
 
 		# Iterate over the DataLoader for training data
@@ -85,9 +87,10 @@ def main(raw_args=None):
 			outputs = model(inputs)
 
 			# Compute loss
-			# loss = box_loss_tensor_jit(outputs + boxes_3detr, boxes_gt, torch.tensor(1).to(device), torch.tensor(1).to(device), torch.tensor(1).to(device))
+			loss = box_loss_diff_jit(outputs + boxes_3detr, boxes_gt, w1, w2, w3)
 
-			ipy.embed() # ll = box_loss_tensor(boxes_gt+0.1, boxes_gt, 1, 1, 1)
+			# Compute true (boolean) version of loss for this batch
+			loss_true = box_loss_true(outputs + boxes_3detr, boxes_gt)
 
 			# Perform backward pass
 			loss.backward()
@@ -97,11 +100,15 @@ def main(raw_args=None):
 
 			# Update current loss
 			current_loss += loss.item()
+			current_loss_true += loss_true.item()
 			num_batches += 1
 
-	    # Print 
-		if verbose and (epoch % 10 == 0):
-			print("epoch: ", epoch, "; loss: ", current_loss/num_batches)
+	    # Print
+		print_interval = 1
+		if verbose and (epoch % print_interval == 0):
+			# print("epoch: ", epoch, "; loss: ", current_loss/num_batches, end='\r')
+			print("epoch: ", epoch, "; loss: ", '{:02.6f}'.format(current_loss/num_batches),
+				  "; loss true: ", '{:02.6f}'.format(current_loss_true / num_batches), end='\r')
 
 	# Process is complete.
 	if verbose:

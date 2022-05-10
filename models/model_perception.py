@@ -25,7 +25,7 @@ class MLPModel(nn.Module):
         x = self.linear1(x)
         x = F.relu(x)
         x = self.linear2(x)
-        x = F.relu(x) # softmax(x, dim=1)
+        # x = F.relu(x)
 
         x = x.view((x.shape[0], x.shape[1], self.num_out[0], self.num_out[1]))
 
