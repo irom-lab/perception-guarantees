@@ -124,7 +124,7 @@ def box_loss_true(
     vol_gt_minus_pred = vol_gt - vol_int
 
     # Check enclosure and take max loss across locations in each environment
-    EPS = 1e-6
+    EPS = 1e-4
     not_enclosed = (vol_gt_minus_pred > EPS)
     losses = not_enclosed.amax(dim=1).float()
 

@@ -22,7 +22,7 @@ ROOT_DIR = BASE_DIR
 sys.path.append(os.path.join(ROOT_DIR, 'utils'))
 sys.path.append(os.path.join(ROOT_DIR, 'pretrained'))
 
-from pc_util import preprocess_point_cloud, read_ply, write_bbox_ply_from_outputs, pc_to_axis_aligned_rep
+from pc_util import preprocess_point_cloud, read_ply, pc_to_axis_aligned_rep
 from make_args import make_args_parser
 
 

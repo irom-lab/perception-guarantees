@@ -267,7 +267,7 @@ def write_oriented_bbox(scene_bbox, out_filename, colors=None):
 
     return
 
-def write_bbox_ply_from_outputs(outputs, out_filename, prob_threshold=0.5):
+def write_oriented_bbox_ply_from_outputs(outputs, out_filename, prob_threshold=0.5):
     '''
     Write ply file corresponding to bounding boxes using outputs of 3DETR model.
     Args:
@@ -280,11 +280,12 @@ def write_bbox_ply_from_outputs(outputs, out_filename, prob_threshold=0.5):
     centers = outputs["outputs"]["center_unnormalized"] 
     centers = centers.cpu().detach().numpy()
     lengths = outputs["outputs"]["size_unnormalized"]
-    lengths = lengths.cpu().detach().numpy() 
+    lengths = lengths.cpu().detach().numpy()
 
     inds = outputs["outputs"]["objectness_prob"] > prob_threshold
     inds = inds.cpu()
-    inds = inds[0,:]
+    inds = inds[0, :]
+
     centers = centers[:,inds,:]
     lengths = lengths[:,inds,:]
 
@@ -292,6 +293,7 @@ def write_bbox_ply_from_outputs(outputs, out_filename, prob_threshold=0.5):
     angles = angles[:,inds]
     angles = angles.cpu().detach().numpy()
 
+    # ipy.embed()
     scene_bbox = np.concatenate((centers, lengths), 2)
     scene_bbox = scene_bbox[0,:,:]
 
