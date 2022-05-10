@@ -6,11 +6,8 @@ Modified from iGibson/igibson/examples/objects/load_objects.py.
 # Things to do:
 
 # Setup training:
-#    - Debug why loss function is negative for: ll = box_loss_tensor(boxes_gt+0.1, boxes_gt, 1, 1, 1)
-#       - Run train.py and run the above line
-#    - Put back jit for loss function.
-#    - Implement final reduction to scalar in loss function.
-#    - Choose weights for loss terms.
+#    - Figure out exactly why training loop is structured the way it is (with num_batches).
+#    - Change back x_grid and y_grid, and x_lims
 #    - May need to handle case where object is not visible in a special way.
 
 # Notes:
@@ -61,19 +58,18 @@ def render_env(seed):
 
     ########################################
     # Define some parameters
-    start_loc = np.array([0, -10, 0.5])
-    camera_height = 0.5 
+    camera_height = 0.5
     view_direction = np.array([0, 1, 0])
     cam_dist_thresh = 5.0
 
-    x_lims = [-2, 2]
+    x_lims = [-0.1, 0.1] # [-2, 2]
     y_lims = [-10, -4]
 
     obs_x_lims = x_lims
     obs_y_lims = [y_lims[0]+1, y_lims[1]-1] # Obstacles are not placed right at the boundaries
 
-    x_grid = np.linspace(-2,2,10)
-    y_grid = np.linspace(-10, -10+6,20)
+    x_grid = np.linspace(-0.1, 0.1, 5) # np.linspace(-2,2,10)
+    y_grid = np.linspace(-10, -10+0.1, 10) # np.linspace(-10, -10+6,20)
 
     num_pc_points = 40000 # Number of points to sample in each point cloud
     ########################################
