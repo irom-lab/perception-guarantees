@@ -29,21 +29,21 @@ def main(raw_args=None):
 	batch_size = 10
 
 	params = {'batch_size': batch_size,
-				'shuffle': False} # True
+				'shuffle': False}
 	           # 'num_workers': 12}
 	dataloader = DataLoader(dataset, **params)
 	###################################################################
 
 	###################################################################
 	# Device
-	# device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-	device = torch.device('cuda') # cpu'
+	device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+	# device = torch.device('cpu')
 	###################################################################
 
 	###################################################################
 	# Initialize NN model
 	num_in = dataset.feature_dims[0]*dataset.feature_dims[1]
-	num_out = (2,3)
+	num_out = (2,3) # bbox corner representation
 	model = MLPModel(num_in, num_out)
 	model.to(device)
 	###################################################################
@@ -56,60 +56,73 @@ def main(raw_args=None):
 	###################################################################
 	# Choose loss weights
 	w1 = torch.tensor(1.0).to(device)
-	w2 = torch.tensor(0.1).to(device)
+	w2 = torch.tensor(0.05).to(device)
 	w3 = torch.tensor(1.0).to(device)
 	###################################################################
 
-
 	# Run the training loop
-	num_epochs = 5000 
+	num_epochs = 500
 	for epoch in range(0, num_epochs):
 
+		###################################################################
+		# Initialize running losses for this epoch
 		current_loss = 0.0
 		current_loss_true = 0.0
 		num_batches = 0
+		###################################################################
 
+		###################################################################
 		# Iterate over the DataLoader for training data
 		for i, data in enumerate(dataloader, 0):
 
+			###################################################################
 			# Get inputs
 			inputs, targets = data
 			inputs = inputs.to(device)
 			boxes_3detr = targets["bboxes_3detr"].to(device)
 			boxes_gt = targets["bboxes_gt"].to(device)
+			###################################################################
 
-
+			###################################################################
 			# Zero the gradients
 			optimizer.zero_grad()
 
-
 			# Perform forward pass
 			outputs = model(inputs)
+			###################################################################
 
+			###################################################################
 			# Compute loss
 			loss = box_loss_diff_jit(outputs + boxes_3detr, boxes_gt, w1, w2, w3)
 
 			# Compute true (boolean) version of loss for this batch
 			loss_true = box_loss_true(outputs + boxes_3detr, boxes_gt)
+			###################################################################
 
+			###################################################################
 			# Perform backward pass
 			loss.backward()
 
 			# Perform optimization
 			optimizer.step()
+			###################################################################
 
-			# Update current loss
+			###################################################################
+			# Update current loss for this epoch (summing across batches)
 			current_loss += loss.item()
 			current_loss_true += loss_true.item()
 			num_batches += 1
+		###################################################################
 
-	    # Print
+		###################################################################
+	    # Print losses (averaged across batches in this epoch)
 		print_interval = 1
 		if verbose and (epoch % print_interval == 0):
-			# print("epoch: ", epoch, "; loss: ", current_loss/num_batches, end='\r')
 			print("epoch: ", epoch, "; loss: ", '{:02.6f}'.format(current_loss/num_batches),
 				  "; loss true: ", '{:02.6f}'.format(current_loss_true / num_batches), end='\r')
+		###################################################################
 
+	###################################################################
 	# Process is complete.
 	if verbose:
 	    print('Training complete.')
@@ -118,6 +131,7 @@ def main(raw_args=None):
 	torch.save(model.state_dict(), "trained_models/perception_model")
 	if verbose:
 	    print('Saved trained model.')
+	###################################################################
 
 
 #################################################################

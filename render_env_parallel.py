@@ -4,11 +4,12 @@ Modified from iGibson/igibson/examples/objects/load_objects.py.
 '''
 
 # Things to do:
-
-# Setup training:
-#    - Figure out exactly why training loop is structured the way it is (with num_batches).
-#    - Change back x_grid and y_grid, and x_lims
-#    - May need to handle case where object is not visible in a special way.
+#    - Need to handle case where object is not visible in a special way
+#       - Say that 3DETR output is entire workspace.
+#       - Need to make sure this is consistent when using the model elsewhere (e.g., evaluation). Should just create a function.
+#    - Might need to tune loss weights a bit more. Check normalization of loss terms. Write things up in overleaf.
+#    - Scale things up to sizes we would need for PAC-Bayes.
+#    - Clean up code a bit and write order in which to runs scripts in README.
 
 # Notes:
 # - If I need to speed up training, I can use features just from the query that corresponds to an object
@@ -62,14 +63,11 @@ def render_env(seed):
     view_direction = np.array([0, 1, 0])
     cam_dist_thresh = 5.0
 
-    x_lims = [-0.1, 0.1] # [-2, 2]
-    y_lims = [-10, -4]
+    obs_x_lims = [-2, 2] # [-0.5, 0.5]
+    obs_y_lims = [-8, -1] # [-10+3, -10+4]
 
-    obs_x_lims = x_lims
-    obs_y_lims = [y_lims[0]+1, y_lims[1]-1] # Obstacles are not placed right at the boundaries
-
-    x_grid = np.linspace(-0.1, 0.1, 5) # np.linspace(-2,2,10)
-    y_grid = np.linspace(-10, -10+0.1, 10) # np.linspace(-10, -10+6,20)
+    x_grid = np.linspace(-2, 2, 10) # np.linspace(-0.1, 0.1, 5)
+    y_grid = np.linspace(-10, 0, 20) # np.linspace(-10, -10+0.5, 10)
 
     num_pc_points = 40000 # Number of points to sample in each point cloud
     ########################################
