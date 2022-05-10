@@ -4,7 +4,7 @@ Modified from iGibson/igibson/examples/objects/load_objects.py.
 '''
 
 # Things to do:
-#    - Need to handle case where object is not visible in a special way
+#    - Need to handle case where object is not visible in a special way.
 #       - Say that 3DETR output is entire workspace.
 #       - Need to make sure this is consistent when using the model elsewhere (e.g., evaluation). Should just create a function.
 #    - Might need to tune loss weights a bit more. Check normalization of loss terms. Write things up in overleaf.
