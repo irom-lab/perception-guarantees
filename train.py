@@ -58,6 +58,10 @@ def main(raw_args=None):
 	w1 = torch.tensor(1.0).to(device)
 	w2 = torch.tensor(0.05).to(device)
 	w3 = torch.tensor(1.0).to(device)
+
+	# Load loss mask
+	loss_mask = torch.load("loss_mask.pt")
+	loss_mask = loss_mask.to(device)
 	###################################################################
 
 	# Run the training loop
@@ -93,10 +97,10 @@ def main(raw_args=None):
 
 			###################################################################
 			# Compute loss
-			loss = box_loss_diff_jit(outputs + boxes_3detr, boxes_gt, w1, w2, w3)
+			loss = box_loss_diff_jit(outputs + boxes_3detr, boxes_gt, w1, w2, w3, loss_mask)
 
 			# Compute true (boolean) version of loss for this batch
-			loss_true = box_loss_true(outputs + boxes_3detr, boxes_gt)
+			loss_true = box_loss_true(outputs + boxes_3detr, boxes_gt, loss_mask)
 			###################################################################
 
 			###################################################################

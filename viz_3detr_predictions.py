@@ -66,7 +66,7 @@ if __name__=='__main__':
     ###########################################################################
     # Read point cloud    
     env = 0
-    loc_ind = 0 # -1
+    loc_ind = 45 # -1
     point_cloud = data[env]["point_clouds"][loc_ind]
 
     # Save point cloud
@@ -95,6 +95,8 @@ if __name__=='__main__':
     scene_bbox = point_cloud_to_bbox(bbox_world_frame)
     scene_bbox = scene_bbox.reshape((1,6))
     write_bbox(scene_bbox, "bbox_ground_truth.ply")
+
+    ipy.embed()
 
 #     scene_bbox = np.concatenate((bbox_center, bbox_bf_extent, np.array([euler_from_quat(bbox_orn)[2]])))
 #     scene_bbox = scene_bbox.reshape((1,7))

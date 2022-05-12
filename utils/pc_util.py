@@ -151,33 +151,6 @@ def point_cloud_to_bbox(points):
     cntr = 0.5 * (mn + mx)
     return np.concatenate([cntr, lengths], axis=which_dim)
 
-def pc_to_axis_aligned_rep(points):
-    """
-    Args:
-        points: N x 3 points or B x N x 3
-    Output:
-        (2,3) array: (x1,y1,z1), (x2,y2,z2) corresponding to opposing corners of axis-aligned bounding box
-    """
-
-    which_dim = len(points.shape) - 2  # first dim if a single cloud and second if batch
-
-    # Vertex corresponding to min (x,y,z) and max (x,y,z)
-    vert_min = points.min(which_dim)
-    vert_max = points.max(which_dim)
-
-    if len(points.shape) == 3: # Batch
-        B = points.shape[0] # Batch size
-        vert_min = vert_min.reshape((B, 1, 3))
-        vert_max = vert_max.reshape((B, 1, 3))
-
-        # Return (B,2,3) array
-        verts = np.concatenate((vert_min, vert_max), 1)
-    else: # No batch
-        vert_min = vert_min.reshape((1,3))
-        vert_max = vert_max.reshape((1,3))
-        verts = np.concatenate((vert_min, vert_max), 0)
-
-    return verts
 
 def write_bbox(scene_bbox, out_filename):
     """Export scene bbox to meshes
@@ -266,6 +239,39 @@ def write_oriented_bbox(scene_bbox, out_filename, colors=None):
 
 
     return
+
+
+#################################################################################
+# Newly added functions
+
+def pc_to_axis_aligned_rep(points):
+    """
+    Args:
+        points: N x 3 points or B x N x 3
+    Output:
+        (2,3) array: (x1,y1,z1), (x2,y2,z2) corresponding to opposing corners of axis-aligned bounding box
+    """
+
+    which_dim = len(points.shape) - 2  # first dim if a single cloud and second if batch
+
+    # Vertex corresponding to min (x,y,z) and max (x,y,z)
+    vert_min = points.min(which_dim)
+    vert_max = points.max(which_dim)
+
+    if len(points.shape) == 3: # Batch
+        B = points.shape[0] # Batch size
+        vert_min = vert_min.reshape((B, 1, 3))
+        vert_max = vert_max.reshape((B, 1, 3))
+
+        # Return (B,2,3) array
+        verts = np.concatenate((vert_min, vert_max), 1)
+    else: # No batch
+        vert_min = vert_min.reshape((1,3))
+        vert_max = vert_max.reshape((1,3))
+        verts = np.concatenate((vert_min, vert_max), 0)
+
+    return verts
+
 
 def write_oriented_bbox_ply_from_outputs(outputs, out_filename, prob_threshold=0.5):
     '''

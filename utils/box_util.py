@@ -735,3 +735,24 @@ def generalized_box3d_iou(
             return generalized_box3d_iou_cython(
                 corners1, corners2, nums_k2, rotated_boxes, return_inter_vols_only
             )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
