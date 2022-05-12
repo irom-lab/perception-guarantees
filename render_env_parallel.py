@@ -1,24 +1,30 @@
 '''
-Load an object (chair) into an empty scene in a random location. 
-Modified from iGibson/igibson/examples/objects/load_objects.py.
+Load an object (chair) into an empty scene in a random location and render different camera views.
+Coordinate system of scene:  +X (right), +Y (forward), +Z (up)
+Coordinate system of camera: +X (right), +Y (up), +Z (backwards)
+Coordinate system for 3DETR: same as scene
 '''
 
 # Things to do:
-#    - Need to handle case where object is not visible in a special way.
-#       - Say that 3DETR output is entire workspace.
-#       - Need to make sure this is consistent when using the model elsewhere (e.g., evaluation). Should just create a function.
-#    - Might need to tune loss weights a bit more. Check normalization of loss terms. Write things up in overleaf.
+#    - Figure out why predicted boundin boxes are so large now. Might need to tune loss weights a bit more.
+#    Check normalization of loss terms. Write things up in overleaf.
 #    - Scale things up to sizes we would need for PAC-Bayes.
 #    - Clean up code a bit and write order in which to runs scripts in README.
 
 # Notes:
-# - If I need to speed up training, I can use features just from the query that corresponds to an object
+#    - Need to handle masking of loss in case where object is not visible in a proper way.
+#       - Currently, we're just looking at the 3DETR probability in
+#        compute_features.py to say if the object is visible or not. But, it might be the case that the object is actually
+#        visible, but this does not cach it. We should mask the loss with 0 if 3DETR says that there is no object in the scene
+#        and if there is actually no object in the scene. See InFOVOfAgent function.
+#       - Need to make sure this is consistent when using the model elsewhere (e.g., evaluation).
+# - If I need to speed up training, I can use features just from the query that corresponds to an object.
 # - Code currently assumes that there is only one object in environment
-#       - render_env_parallel.py will need to output multiple bounding boxes for multiple objects
+#       - render_env_parallel.py will need to output multiple bounding boxes for multiple objects.
 #       - compute_features.py will need a small modification to save multiple bounding boxes.
 #       - model_perception.py will need to output multiple bounding boxes.
 #       - loss function will need to handle multiple bounding boxes.
-# - Bounding boxes that gibson provides are slightly larger than they need to be
+# - Bounding boxes that gibson provides are slightly larger than they need to be.
 
 import logging
 import os
@@ -26,6 +32,7 @@ from sys import platform
 import IPython as ipy
 import time
 from multiprocessing import Pool
+import json
 
 import numpy as np
 import itertools
@@ -58,7 +65,7 @@ def render_env(seed):
     """
 
     ########################################
-    # Define some parameters
+    # Define some parameters and save them in json file
     camera_height = 0.5
     view_direction = np.array([0, 1, 0])
     cam_dist_thresh = 5.0
@@ -70,6 +77,17 @@ def render_env(seed):
     y_grid = np.linspace(-10, 0, 20) # np.linspace(-10, -10+0.5, 10)
 
     num_pc_points = 40000 # Number of points to sample in each point cloud
+
+    params = {"camera_height": camera_height,
+    "cam_dist_thresh": cam_dist_thresh,
+    "obs_x_lims": obs_x_lims,
+    "obs_y_lims": obs_y_lims,
+    "num_pc_points": num_pc_points
+    }
+
+    # Write params to json file
+    with open("env_params.json", "w") as write_file:
+        json.dump(params, write_file)
     ########################################
 
 

@@ -9,6 +9,7 @@ import argparse
 import importlib
 import time
 import IPython as ipy
+import json
 
 import torch
 import torch.nn as nn
@@ -51,6 +52,12 @@ if __name__=='__main__':
     device = torch.device("cuda")
     ###########################################################################
 
+    ###########################################################################
+    # Load params from json file
+    with open("env_params.json", "r") as read_file:
+        params = json.load(read_file)
+    ###########################################################################
+
 
     ###########################################################################
     # Get data
@@ -60,7 +67,7 @@ if __name__=='__main__':
     num_envs = len(data) # Number of environments where we collected data
     num_cam_positions = len(data[0]["cam_positions"]) # Number of camera locations in this environment
 
-    num_pc_points = data[0]["point_clouds"][0].shape[1] # Number of points in each point cloud
+    num_pc_points = params["num_pc_points"] # Number of points in each point cloud
 
     # Batch size for processing inputs on GPU
     batch_size = 2 # Cannot be too large since GPU runs out of memory
@@ -76,6 +83,8 @@ if __name__=='__main__':
     # Initialize data structure for ground truth bounding boxes for each environment
     bboxes_ground_truth = torch.zeros(num_envs, 8, 3)
     bboxes_ground_truth_aligned = torch.zeros(num_envs, 2, 3)
+
+    loss_mask = torch.zeros(num_envs, num_cam_positions)
 
 
     # Initialize outputs
@@ -149,6 +158,13 @@ if __name__=='__main__':
             bbox_pred_points = bbox_pred_points[range(batch_size), box_inds, :, :]
 
             model_outputs_all["box_axis_aligned"][env,batch_inds,:,:] = torch.tensor(pc_to_axis_aligned_rep(bbox_pred_points.numpy()))
+            
+            # Check if object was actually visible; if not, mask loss
+            # TODO: Right now, we are just using the output of 3DETR to check this. We need to do this properly (see notes).
+            p_thresh = 0.4
+            loss_mask[env, batch_inds] =  (outputs["outputs"]["objectness_prob"].amax(1) > p_thresh).float()
+
+
             #####################################
 
 
@@ -162,9 +178,11 @@ if __name__=='__main__':
     # Save processed feature data
     torch.save(model_outputs_all, "features.pt")
 
-
     # Save ground truth bounding boxes
     torch.save(bboxes_ground_truth_aligned, "bbox_labels.pt")
+
+    # Save loss mask
+    torch.save(loss_mask, "loss_mask.pt")
     ###########################################################################
 
 

@@ -12,7 +12,8 @@ def box_loss_diff(
     corners_gt: torch.Tensor,
     w1: torch.Tensor,
     w2: torch.Tensor,
-    w3: torch.Tensor
+    w3: torch.Tensor,
+    loss_mask: torch.Tensor
 ):
     """
     Box loss for optimization.
@@ -71,6 +72,9 @@ def box_loss_diff(
 
     losses = w1*l1 + w2*l2 + w3*l3
 
+    # Mask loss in locations where object was not visible
+    losses = torch.mul(loss_mask, losses.view((B, K)))
+
     # Take max across locations
     losses = losses.amax(dim=1)
 
@@ -85,6 +89,7 @@ box_loss_diff_jit = torch.jit.script(box_loss_diff)
 def box_loss_true(
     corners_pred: torch.Tensor,
     corners_gt: torch.Tensor,
+    loss_mask: torch.Tensor
 ):
     """
     Box loss corresponding to enclosure of ground truth boxes.
@@ -125,8 +130,13 @@ def box_loss_true(
 
     # Check enclosure and take max loss across locations in each environment
     EPS = 1e-4
-    not_enclosed = (vol_gt_minus_pred > EPS)
-    losses = not_enclosed.amax(dim=1).float()
+    not_enclosed = (vol_gt_minus_pred > EPS).float()
+
+    # Mask loss (0 for locations where object was not visible)
+    not_enclosed = torch.mul(loss_mask, not_enclosed.view((not_enclosed.shape[0], not_enclosed.shape[1])))
+
+    # Take max loss across locations in each environment
+    losses = not_enclosed.amax(dim=1)
 
     # Take mean across environments in the batch
     mean_loss = losses.mean()
