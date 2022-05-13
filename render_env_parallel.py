@@ -6,8 +6,8 @@ Coordinate system for 3DETR: same as scene
 '''
 
 # Things to do:
-#    - Figure out why predicted boundin boxes are so large now. Might need to tune loss weights a bit more.
-#    Check normalization of loss terms. Write things up in overleaf.
+#    - Either fix sampling of viewpoint locations to take into account obstacle, or mask these losses.
+#    - Write up loss in overleaf.
 #    - Scale things up to sizes we would need for PAC-Bayes.
 #    - Clean up code a bit and write order in which to runs scripts in README.
 

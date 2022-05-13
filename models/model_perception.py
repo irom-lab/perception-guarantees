@@ -9,8 +9,8 @@ class MLPModel(nn.Module):
     def __init__(self, num_in, num_out):
         super(MLPModel, self).__init__()
 
-        self.linear1 = nn.Linear(num_in, 50)
-        self.linear2 = nn.Linear(50, np.prod(num_out))
+        self.linear1 = nn.Linear(num_in, 200)
+        self.linear2 = nn.Linear(200, np.prod(num_out))
         self.num_out = num_out
 
     def forward(self, x):

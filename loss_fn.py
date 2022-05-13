@@ -66,8 +66,8 @@ def box_loss_diff(
     vol_union = (vol_pred + vol_gt - vol_int).clamp(min=EPS)
 
     # Now compute all the terms in the loss
-    l1 = vol_gt_minus_pred/vol_union
-    l2 = vol_pred_minus_gt/vol_union
+    l1 = vol_gt_minus_pred / vol_gt
+    l2 = vol_pred_minus_gt / vol_pred
     l3 = (vol_enclosing - vol_union)/vol_enclosing
 
     losses = w1*l1 + w2*l2 + w3*l3
@@ -89,7 +89,8 @@ box_loss_diff_jit = torch.jit.script(box_loss_diff)
 def box_loss_true(
     corners_pred: torch.Tensor,
     corners_gt: torch.Tensor,
-    loss_mask: torch.Tensor
+    loss_mask: torch.Tensor,
+    tol
 ):
     """
     Box loss corresponding to enclosure of ground truth boxes.
@@ -97,6 +98,8 @@ def box_loss_true(
         corners_pred: torch Tensor (B, K, 2, 3). Predicted.
         corners_gt: torch Tensor (B, K, 2, 3). Ground truth.
         Assumes that all boxes are axis-aligned.
+        loss_mask: mask on loss (based on whether object is visible).
+        tol: tolerance on checking enclosure.
     Returns:
         Mean loss across environments. The loss for each env is 0 if all predicted boxes for that env encapsulate the
         ground truth box, and 0 otherwise.
@@ -129,8 +132,7 @@ def box_loss_true(
     vol_gt_minus_pred = vol_gt - vol_int
 
     # Check enclosure and take max loss across locations in each environment
-    EPS = 1e-4
-    not_enclosed = (vol_gt_minus_pred > EPS).float()
+    not_enclosed = (vol_gt_minus_pred/vol_gt > tol).float()
 
     # Mask loss (0 for locations where object was not visible)
     not_enclosed = torch.mul(loss_mask, not_enclosed.view((not_enclosed.shape[0], not_enclosed.shape[1])))
@@ -141,7 +143,7 @@ def box_loss_true(
     # Take mean across environments in the batch
     mean_loss = losses.mean()
 
-    return mean_loss
+    return mean_loss, not_enclosed
 
 
 
