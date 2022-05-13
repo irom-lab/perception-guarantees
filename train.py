@@ -50,13 +50,13 @@ def main(raw_args=None):
 
 	###################################################################
 	# Define optimizer
-	optimizer = torch.optim.Adam(model.parameters(), lr=1e-3) # , weight_decay=1e-5)
+	optimizer = torch.optim.Adam(model.parameters(), lr=1e-4) # , weight_decay=1e-5)
 	###################################################################
 
 	###################################################################
 	# Choose loss weights
 	w1 = torch.tensor(1.0).to(device)
-	w2 = torch.tensor(0.05).to(device)
+	w2 = torch.tensor(0.2).to(device)
 	w3 = torch.tensor(1.0).to(device)
 
 	# Load loss mask
@@ -65,7 +65,7 @@ def main(raw_args=None):
 	###################################################################
 
 	# Run the training loop
-	num_epochs = 500
+	num_epochs = 1000
 	for epoch in range(0, num_epochs):
 
 		###################################################################
@@ -100,7 +100,7 @@ def main(raw_args=None):
 			loss = box_loss_diff_jit(outputs + boxes_3detr, boxes_gt, w1, w2, w3, loss_mask)
 
 			# Compute true (boolean) version of loss for this batch
-			loss_true = box_loss_true(outputs + boxes_3detr, boxes_gt, loss_mask)
+			loss_true, not_enclosed = box_loss_true(outputs + boxes_3detr, boxes_gt, loss_mask, 0.01)
 			###################################################################
 
 			###################################################################
@@ -136,6 +136,8 @@ def main(raw_args=None):
 	if verbose:
 	    print('Saved trained model.')
 	###################################################################
+
+	ipy.embed()
 
 
 #################################################################

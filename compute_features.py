@@ -161,8 +161,11 @@ if __name__=='__main__':
             
             # Check if object was actually visible; if not, mask loss
             # TODO: Right now, we are just using the output of 3DETR to check this. We need to do this properly (see notes).
-            p_thresh = 0.4
-            loss_mask[env, batch_inds] =  (outputs["outputs"]["objectness_prob"].amax(1) > p_thresh).float()
+            p_thresh = 0.2
+            is_object = (outputs["outputs"]["objectness_prob"].amax(1) > p_thresh)
+            is_chair = (outputs["outputs"]["sem_cls_prob"][:,:,3].amax(1) > p_thresh) # check if chair
+            is_visible = torch.logical_and(is_object, is_chair)
+            loss_mask[env, batch_inds] =  is_visible.float()
 
 
             #####################################
