@@ -9,6 +9,7 @@ import torch
 import numpy as np
 from scipy.spatial import ConvexHull, Delaunay
 from utils.misc import to_list_1d, to_list_3d
+import IPython as ipy
 
 try:
     from utils.box_intersection import box_intersection
@@ -738,7 +739,18 @@ def generalized_box3d_iou(
 
 
 
+############################################################
+# Added functions
 
+def inside_aligned_box(point, box):
+    '''
+    point: (3,) vector.
+    box: (2,3) array (corner representation).
+    '''
+
+    is_inside = (point >= box[0,:]).all() and (point <= box[1,:]).all()
+
+    return is_inside
 
 
 

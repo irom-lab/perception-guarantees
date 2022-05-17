@@ -165,7 +165,13 @@ if __name__=='__main__':
             is_object = (outputs["outputs"]["objectness_prob"].amax(1) > p_thresh)
             is_chair = (outputs["outputs"]["sem_cls_prob"][:,:,3].amax(1) > p_thresh) # check if chair
             is_visible = torch.logical_and(is_object, is_chair)
-            loss_mask[env, batch_inds] =  is_visible.float()
+
+            # Check if camera was inside obstacle bounding box (and 0 out loss if so)
+            not_inside = data[env]["cam_not_inside_obs"][batch_inds]
+            not_inside = torch.tensor(not_inside).to(device)
+
+
+            loss_mask[env, batch_inds] =  torch.logical_and(is_visible, not_inside).float()
 
 
             #####################################

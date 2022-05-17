@@ -50,13 +50,13 @@ def main(raw_args=None):
 
 	###################################################################
 	# Define optimizer
-	optimizer = torch.optim.Adam(model.parameters(), lr=1e-4) # , weight_decay=1e-5)
+	optimizer = torch.optim.Adam(model.parameters(), lr=1e-4) 
 	###################################################################
 
 	###################################################################
 	# Choose loss weights
 	w1 = torch.tensor(1.0).to(device)
-	w2 = torch.tensor(0.2).to(device)
+	w2 = torch.tensor(0.1).to(device)
 	w3 = torch.tensor(1.0).to(device)
 
 	# Load loss mask
