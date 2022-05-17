@@ -51,8 +51,8 @@ def main(raw_args=None):
 	###################################################################
 
 	###################################################################
-	env = 4
-	loc = 191
+	env = 0
+	loc = 45
 
 	# Get point cloud and save as ply
 	point_cloud = data_raw[env]["point_clouds"][loc]

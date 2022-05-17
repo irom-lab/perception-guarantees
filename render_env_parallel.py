@@ -6,7 +6,6 @@ Coordinate system for 3DETR: same as scene
 '''
 
 # Things to do:
-#    - Either fix sampling of viewpoint locations to take into account obstacle, or mask these losses.
 #    - Write up loss in overleaf.
 #    - Scale things up to sizes we would need for PAC-Bayes.
 #    - Clean up code a bit and write order in which to runs scripts in README.
@@ -40,6 +39,8 @@ import trimesh
 import yaml
 
 from utils.pc_util import preprocess_point_cloud, write_ply, write_ply_rgb, pc_cam_to_gibson, write_oriented_bbox, pc_to_axis_aligned_rep
+from utils.box_util import inside_aligned_box
+
 
 import igibson
 from igibson.envs.igibson_env import iGibsonEnv
@@ -55,6 +56,7 @@ from igibson.scenes.gibson_indoor_scene import StaticIndoorScene
 from igibson.simulator import Simulator
 from igibson.utils.assets_utils import get_ig_avg_category_specs, get_ig_category_path, get_ig_model_path
 from igibson.utils.utils import let_user_pick, parse_config, quat_pos_to_mat
+
 
 def render_env(seed):
     """
@@ -223,6 +225,8 @@ def render_env(seed):
         cam_positions = num_views*[None]
         point_clouds = num_views*[None]
 
+        cam_not_inside_obs = num_views*[None]
+
         ind = 0
         for i in range(len(x_grid)):
             for j in range(len(y_grid)):
@@ -231,6 +235,8 @@ def render_env(seed):
                 camera_pos = np.array([x_grid[i], y_grid[j], camera_height])
                 cam_positions[ind] = camera_pos
 
+                # Check if camera location is inside obstacle bbox
+                cam_not_inside_obs[ind] = (not inside_aligned_box(camera_pos, bbox_world_frame_aligned))
 
                 s.renderer.set_camera(camera_pos, camera_pos + view_direction, [0, 0, 1])
                 s.renderer.set_fov(90)
@@ -271,6 +277,7 @@ def render_env(seed):
 
 
     return {"cam_positions": cam_positions, # Camera positions in Gibson world frame
+            "cam_not_inside_obs": cam_not_inside_obs, # Booleans saying whether camera was inside obstacle for each location
             "point_clouds": point_clouds, # Point clouds in Gibson world frame
             "bbox_world_frame_vertices": bbox_world_frame_vertex_positions, # Bounding boxes in Gibson world frame
             "bbox_world_frame_aligned": bbox_world_frame_aligned} # Axis-aligned bounding box representation
@@ -284,6 +291,7 @@ def main(raw_args=None):
         "point_clouds", "bbox_world_frame_vertices"
             cam_positions: List of length num_views; each element corresponds to (x,y) 
                             position of camera in Gibson world frame 
+            cam_not_inside_obs: Booleans saying whether camera was not inside obstacle for each location
             point_clouds: List of length num_views; each element corresponds to point cloud
                             in Gibson world frame (taken from corresponding cam_position).
             bbox_world_frame_vertices: (8,3) array of vertices of bounding box of object in Gibson world frame.
