@@ -5,25 +5,6 @@ Coordinate system of camera: +X (right), +Y (up), +Z (backwards)
 Coordinate system for 3DETR: same as scene
 '''
 
-# Things to do:
-#    - Scale things up to sizes we would need for PAC-Bayes.
-#    - Clean up code a bit and write order in which to runs scripts in README.
-
-# Notes:
-#    - Need to handle masking of loss in case where object is not visible in a proper way.
-#       - Currently, we're just looking at the 3DETR probability in
-#        compute_features.py to say if the object is visible or not. But, it might be the case that the object is actually
-#        visible, but this does not cach it. We should mask the loss with 0 if 3DETR says that there is no object in the scene
-#        and if there is actually no object in the scene. See InFOVOfAgent function.
-#       - Need to make sure this is consistent when using the model elsewhere (e.g., evaluation).
-# - If I need to speed up training, I can use features just from the query that corresponds to an object.
-# - Code currently assumes that there is only one object in environment
-#       - render_env_parallel.py will need to output multiple bounding boxes for multiple objects.
-#       - compute_features.py will need a small modification to save multiple bounding boxes.
-#       - model_perception.py will need to output multiple bounding boxes.
-#       - loss function will need to handle multiple bounding boxes.
-# - Bounding boxes that gibson provides are slightly larger than they need to be (not entirely sure why).
-
 import logging
 import os
 from sys import platform
@@ -91,16 +72,13 @@ def render_env(seed):
         json.dump(params, write_file)
     ########################################
 
-
     ########################################
     headless=True
     ########################################
 
-
     ########################################
     np.random.seed(seed)
     ########################################
-
 
     ########################################
 
@@ -245,7 +223,7 @@ def render_env(seed):
                 pc = s.renderer.render(modes=("3d"))[0]
                 points = pc.reshape((pc.shape[0]*pc.shape[1],4))[:,0:3]
 
-                # Get rid of points that are too far away
+                # Get rid of points that are too far away from camera
                 inds_good1 = (points[:,2] > -cam_dist_thresh)
 
                 # Get rid of points that are too close
@@ -286,8 +264,7 @@ def main(raw_args=None):
     '''
     Generates data in the following format:
     results: List of length num_envs
-        results[i]: data corresponding to environment i; dictionary with "cam_positions", 
-        "point_clouds", "bbox_world_frame_vertices"
+        results[i]: data corresponding to environment i; dictionary with following items:
             cam_positions: List of length num_views; each element corresponds to (x,y) 
                             position of camera in Gibson world frame 
             cam_not_inside_obs: Booleans saying whether camera was not inside obstacle for each location
@@ -299,7 +276,7 @@ def main(raw_args=None):
 
     ##################################################################
     # Number of environments
-    num_envs = 10
+    num_envs = 100
 
     # Number of parallel threads
     num_parallel = 12
@@ -322,7 +299,7 @@ def main(raw_args=None):
 
     ##################################################################
     # Save data
-    np.savez("training_data_raw.npz", data=results)
+    np.savez("data/training_data_raw.npz", data=results)
     ##################################################################
 
 

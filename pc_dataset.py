@@ -3,11 +3,14 @@ from torch.utils.data import Dataset
 import IPython as ipy
 
 class PointCloudDataset(Dataset):
-    def __init__(self, features_file, bbox_labels_file):
+    def __init__(self, features_file, bbox_labels_file, loss_mask_file):
 
         # Point cloud features from 3DETR
         self.features = torch.load(features_file)
         self.feature_dims = self.features["box_features"].shape[2:]
+
+        # Loss mask array
+        self.loss_mask = torch.load(loss_mask_file)
 
         # Prediction of axis-aligned box from 3DETR
         self.bbox_3detr = self.features["box_axis_aligned"]
@@ -35,8 +38,11 @@ class PointCloudDataset(Dataset):
         # Get features
         features = self.features["box_features"][idx, :, :, :]
 
-        # Get label (residual between
+        # Get loss mask
+        loss_mask = self.loss_mask[idx, :]
+
+        # Get label
         labels = {'bboxes_gt': self.bbox_labels[idx, :, :, :],
                 'bboxes_3detr': self.bbox_3detr[idx, :, :, :]}
 
-        return features, labels
+        return features, labels, loss_mask
