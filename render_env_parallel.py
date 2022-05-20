@@ -6,7 +6,6 @@ Coordinate system for 3DETR: same as scene
 '''
 
 # Things to do:
-#    - Write up loss in overleaf.
 #    - Scale things up to sizes we would need for PAC-Bayes.
 #    - Clean up code a bit and write order in which to runs scripts in README.
 
@@ -23,7 +22,7 @@ Coordinate system for 3DETR: same as scene
 #       - compute_features.py will need a small modification to save multiple bounding boxes.
 #       - model_perception.py will need to output multiple bounding boxes.
 #       - loss function will need to handle multiple bounding boxes.
-# - Bounding boxes that gibson provides are slightly larger than they need to be.
+# - Bounding boxes that gibson provides are slightly larger than they need to be (not entirely sure why).
 
 import logging
 import os
