@@ -14,6 +14,12 @@ from utils.pc_util import write_ply, point_cloud_to_bbox, write_bbox
 def main(raw_args=None):
 
 	###################################################################
+	# Set environment and camera location for which we should generate ply files
+	env = 0 # Environment index
+	loc = 45 # Camera location index
+	###################################################################
+
+	###################################################################
 	# Parse arguments
 	parser = argparse.ArgumentParser()
 	parser.add_argument("--verbose", type=int, default=1, help="print more (default: 1")
@@ -24,10 +30,10 @@ def main(raw_args=None):
 
 	###################################################################
 	# Initialize dataset and dataloader
-	dataset = PointCloudDataset("features.pt", "bbox_labels.pt")
+	dataset = PointCloudDataset("data/features.pt", "data/bbox_labels.pt", "data/loss_mask.pt")
 
 	# Get point cloud data
-	data_raw = np.load("training_data_raw.npz", allow_pickle=True)
+	data_raw = np.load("data/training_data_raw.npz", allow_pickle=True)
 	data_raw = data_raw["data"]
 	num_pc_points = data_raw[0]["point_clouds"][0].shape[1]  # Number of points in each point cloud
 	###################################################################
@@ -51,26 +57,24 @@ def main(raw_args=None):
 	###################################################################
 
 	###################################################################
-	env = 0
-	loc = 45
 
 	# Get point cloud and save as ply
 	point_cloud = data_raw[env]["point_clouds"][loc]
 	pc_ply = tuple(map(tuple, point_cloud.reshape(num_pc_points, 3)))
 	pc_ply = list(pc_ply)
-	write_ply(pc_ply, "gibson.ply")
+	write_ply(pc_ply, "viz_pcs/gibson_camera.ply")
 
 	# Get ground truth box and save as ply
 	bbox_gt = dataset.bbox_labels[env, loc, :, :].numpy()
 	bbox_gt = point_cloud_to_bbox(bbox_gt)
 	bbox_gt = bbox_gt.reshape((1, 6))
-	write_bbox(bbox_gt, "bbox_gt.ply")
+	write_bbox(bbox_gt, "viz_pcs/bbox_gt.ply")
 
 	# Get 3DETR prediction and save as ply
 	bbox_3detr_orig = dataset.bbox_3detr[env, loc, :, :].numpy()
 	bbox_3detr = point_cloud_to_bbox(bbox_3detr_orig)
 	bbox_3detr = bbox_3detr.reshape((1, 6))
-	write_bbox(bbox_3detr, "bbox_3detr.ply")
+	write_bbox(bbox_3detr, "viz_pcs/bbox_3detr.ply")
 
 	# Run trained perception model and save as ply
 	features = dataset.features["box_features"][env,loc,:,:][None,None,:,:]
@@ -81,7 +85,7 @@ def main(raw_args=None):
 
 	bbox_pred = point_cloud_to_bbox(bbox_pred)
 	bbox_pred = bbox_pred.reshape((1, 6))
-	write_bbox(bbox_pred, "bbox_pred.ply")
+	write_bbox(bbox_pred, "viz_pcs/bbox_pred.ply")
 
 
 #################################################################

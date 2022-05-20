@@ -61,7 +61,7 @@ if __name__=='__main__':
 
     ###########################################################################
     # Get data
-    data = np.load("training_data_raw.npz", allow_pickle=True)
+    data = np.load("data/training_data_raw.npz", allow_pickle=True)
     data = data["data"]
 
     num_envs = len(data) # Number of environments where we collected data
@@ -84,6 +84,7 @@ if __name__=='__main__':
     bboxes_ground_truth = torch.zeros(num_envs, 8, 3)
     bboxes_ground_truth_aligned = torch.zeros(num_envs, 2, 3)
 
+    # Initialize loss mask array
     loss_mask = torch.zeros(num_envs, num_cam_positions)
 
 
@@ -185,13 +186,13 @@ if __name__=='__main__':
 
     ###########################################################################
     # Save processed feature data
-    torch.save(model_outputs_all, "features.pt")
+    torch.save(model_outputs_all, "data/features.pt")
 
     # Save ground truth bounding boxes
-    torch.save(bboxes_ground_truth_aligned, "bbox_labels.pt")
+    torch.save(bboxes_ground_truth_aligned, "data/bbox_labels.pt")
 
     # Save loss mask
-    torch.save(loss_mask, "loss_mask.pt")
+    torch.save(loss_mask, "data/loss_mask.pt")
     ###########################################################################
 
 

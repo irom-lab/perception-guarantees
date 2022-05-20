@@ -25,8 +25,8 @@ def main(raw_args=None):
 
 	###################################################################
 	# Initialize dataset and dataloader
-	dataset = PointCloudDataset("features.pt", "bbox_labels.pt")
-	batch_size = 10
+	dataset = PointCloudDataset("data/features.pt", "data/bbox_labels.pt", "data/loss_mask.pt")
+	batch_size = 100
 
 	params = {'batch_size': batch_size,
 				'shuffle': False}
@@ -59,13 +59,13 @@ def main(raw_args=None):
 	w2 = torch.tensor(0.1).to(device)
 	w3 = torch.tensor(1.0).to(device)
 
-	# Load loss mask
-	loss_mask = torch.load("loss_mask.pt")
-	loss_mask = loss_mask.to(device)
+	# # Load loss mask
+	# loss_mask = torch.load("data/loss_mask.pt")
+	# loss_mask = loss_mask.to(device)
 	###################################################################
 
 	# Run the training loop
-	num_epochs = 1000
+	num_epochs = 1000 # 1000
 	for epoch in range(0, num_epochs):
 
 		###################################################################
@@ -80,11 +80,12 @@ def main(raw_args=None):
 		for i, data in enumerate(dataloader, 0):
 
 			###################################################################
-			# Get inputs
-			inputs, targets = data
+			# Get inputs, targets, loss mask
+			inputs, targets, loss_mask = data
 			inputs = inputs.to(device)
 			boxes_3detr = targets["bboxes_3detr"].to(device)
 			boxes_gt = targets["bboxes_gt"].to(device)
+			loss_mask = loss_mask.to(device)
 			###################################################################
 
 			###################################################################
@@ -137,7 +138,7 @@ def main(raw_args=None):
 	    print('Saved trained model.')
 	###################################################################
 
-	ipy.embed()
+	# ipy.embed()
 
 
 #################################################################
