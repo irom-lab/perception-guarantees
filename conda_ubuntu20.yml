@@ -38,12 +38,16 @@ dependencies:
       - packaging==23.0
       - pillow==9.4.0
       - pybullet==3.2.5
+      - pyglet==1.5.9
       - pyparsing==3.0.9
       - python-dateutil==2.8.2
       - pyyaml==6.0
       - six==1.16.0
+      - scipy==1.10.1
       - torch==1.9.0+cu102
       - torchaudio==0.9.0
       - torchvision==0.10.0+cu102
+      - tqdm==4.65.0
       - typing-extensions==4.5.0
       - zipp==3.15.0
+      - git+https://github.com/allenzren/trimesh.git@master#egg=trimesh
