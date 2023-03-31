@@ -1,27 +1,22 @@
 """
-Test the navigation simulation.
-
-The room has back wall at [0,0].
-
-TODO:
-1. time limit for episode
-2. LiDAR noise model
+Test the navigation simulation with the task dataset.
 
 Please contact the author(s) of this library if you have any questions.
 Authors: Allen Z. Ren (allen.ren@princeton.edu)
 """
 
 import os
-import time
+import random
+import argparse
+import pickle
 import numpy as np
 import matplotlib.pyplot as plt
-from omegaconf import OmegaConf
 
-from nav_sim.env.vanilla_env import VanillaEnv
+from nav_sim.env.task_env import TaskEnv
 
 
-def main(task):
-    env = VanillaEnv(render=True)
+def run_env(task):
+    env = TaskEnv(render=True)
     env.reset(task)
 
     # Press any key to start
@@ -48,6 +43,10 @@ def main(task):
             plt.imshow(observation.transpose(1, 2, 0))
             plt.show()
         elif task.observation.type == 'lidar':
+            # Filter points with z < 0.01 and abs(y) > 3.5 and x> 0.01
+            observation = observation[:, observation[2, :] > 0.01]
+            observation = observation[:, np.abs(observation[1, :]) < 3.5]
+            observation = observation[:, observation[0, :] > 0.01]
             print('Scan - number of points: ', observation.shape[1])
             plt.figure()
             ax = plt.axes(projection='3d')
@@ -61,34 +60,25 @@ def main(task):
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '--task_dataset', default='/home/allen/data/pac-perception/task.pkl',
+        nargs='?', help='path to save the task files'
+    )
+    args = parser.parse_args()
+
+    # Load task dataset
+    with open(args.task_dataset, 'rb') as f:
+        task_dataset = pickle.load(f)
+
+    # Sample random task
+    task = random.choice(task_dataset)
+
     # get root repository path
     nav_sim_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     # Initialize task
-    task = OmegaConf.create()
-    task.init_state = [1, 0.0, 0.0]  # x, y, yaw
-    task.goal_loc = [7, 1.0]
     task.goal_radius = 0.5
-    #
-    task.furniture = {}
-    task.furniture.piece_1 = {
-        'path':
-            os.path.join(
-                nav_sim_path,
-                'asset/sample_furniture/00a91a81-fc73-4625-8298-06ecd55b6aaa/raw_model.obj'
-            ),
-        'position': [4, 0.5, 0.0],
-        'yaw': 0
-    }
-    task.furniture.piece_2 = {
-        'path':
-            os.path.join(
-                nav_sim_path,
-                'asset/sample_furniture/59e52283-361c-4b98-93e9-0abf42686924/raw_model.obj'
-            ),
-        'position': [6, -1, 0.0],
-        'yaw': -np.pi / 2
-    }
     #
     task.observation = {}
     task.observation.type = 'lidar'  # 'rgb' or 'lidar'
@@ -105,10 +95,10 @@ if __name__ == '__main__':
     task.observation.depth.img_w = task.observation.rgb.img_w  # needs to be the same now - assume coming from the same camera
     task.observation.depth.img_h = task.observation.rgb.img_h
     task.observation.lidar.z_offset_from_robot_top = 0.01  # no x/y offset
-    task.observation.lidar.horizontal_res = 3  # resolution, in degree
-    task.observation.lidar.vertical_res = 5  # resolution, in degree
+    task.observation.lidar.horizontal_res = 1  # resolution, in degree
+    task.observation.lidar.vertical_res = 1  # resolution, in degree
     task.observation.lidar.vertical_fov = 30  # half in one direction, in degree
-    task.observation.lidar.max_range = 10  # in meter
+    task.observation.lidar.max_range = 5  # in meter
 
-    # Run
-    main(task)
+    # Run environment
+    run_env(task)

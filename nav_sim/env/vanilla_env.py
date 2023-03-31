@@ -6,11 +6,8 @@ Please contact the author(s) of this library if you have any questions.
 Authors: Allen Z. Ren (allen.ren@princeton.edu)
 """
 
-import os
 import numpy as np
-import math
 import torch
-from omegaconf import OmegaConf
 import pybullet as pb
 from pybullet_utils import bullet_client as bc
 

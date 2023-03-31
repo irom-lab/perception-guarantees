@@ -18,14 +18,32 @@ pip install -e .
 
 ### Usage
 
-Test single environment:
+Test single environment with assets in `nav_sim/asset`:
 
 ```console
-python nav_sim/test/test_sim.py
+python nav_sim/test/test_vanilla_sim.py
+```
+
+Test environment with random tasks generated after following the instructions in the next section:
+
+```console
+python nav_sim/test/test_task_sim.py
 ```
 
 Test vectorized environment:
 
 ```console
 python nav_sim/test/test_vec_sim.py
+```
+
+### Room generation
+
+1. Get the 3D-Front model dataset (TODO: upload to drive). Right now, using 397 chair meshes.
+2. Run script to generate the room configurations:
+```console
+python nav_sim/asset/get_room_from_3dfront.py --save_task_folder=[folder to save the room configurations] --mesh_folder=[3D-Front model folder] --num_room --num_room_per_furniture --room_dim --min_obstacle_spacing --min_init_goal_dist
+```
+3. Generate task dataset by aggregating the room configurations:
+```console
+python nav_sim/asset/get_task_dataset.py --save_path=[path to save the task dataset] --task_folder=[folder to the saved room configurations]
 ```
