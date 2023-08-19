@@ -1,0 +1,3 @@
+[submodule "planning/fmt"]
+	path = planning/fmt
+	url = https://github.com/May0Mei/fmt.git
