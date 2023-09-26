@@ -79,6 +79,7 @@ def cost_optimal(state0, state1, r):
             print(G)
         c =t+x.T@np.linalg.inv(G)@x
         return c
+    
     t_star = opt.minimize(cost, r/2, bounds = [(0,r)], method = 'trust-constr', options={'gtol': 1e-3, 'maxiter': 10}).x[0]
     return cost(t_star), t_star
 
@@ -101,7 +102,7 @@ def backward_box(state, r, vx_range, vy_range):
     xmin,ymin = state[0:2] - r*np.array([vxmax,vymax])
     return xmax,ymax,xmin,ymin
 
-def filter_reachable(state: np.ndarray, state_set: list, r, vx_range, vy_range, direction: str):
+def filter_reachable(state: np.ndarray, state_set: list, r, vx_range, vy_range, direction: str, dt: float):
     """
     Filter reachable states
 
@@ -112,6 +113,7 @@ def filter_reachable(state: np.ndarray, state_set: list, r, vx_range, vy_range, 
         vx_range (list): Range of vx
         vy_range (list): Range of vy
         direction (str): 'F' for forward, 'B' for backward
+        dt: time resolution to compute trajectory
 
     Returns:
         state_set_filtered (list): Filtered set of state indices
@@ -127,6 +129,7 @@ def filter_reachable(state: np.ndarray, state_set: list, r, vx_range, vy_range, 
     state_set_filtered = []
     cost_set_filtered = []
     time_set_filtered = []
+    traj_set_filtered = []
     for idx in range(len(state_set)):
         state_i = state_set[idx]
         if np.any(state_i != state):
@@ -136,25 +139,28 @@ def filter_reachable(state: np.ndarray, state_set: list, r, vx_range, vy_range, 
                 elif direction == 'B':
                     cost, time = cost_optimal(state_i, state, r)
                 if cost <= r:
-                    state_set_filtered.append(idx)
-                    cost_set_filtered.append(cost)
-                    time_set_filtered.append(time)
-    return state_set_filtered, cost_set_filtered, time_set_filtered
+                    x,u = gen_trajectory(state, state_i, time, dt)
+                    if np.all(min(vx_range)<=u[:,0]) and np.all(u[:,0]<=max(vx_range)) and np.all(min(vy_range)<=u[:,1]) and np.all(u[:,1]<=max(vy_range)):
+                        state_set_filtered.append(idx)
+                        cost_set_filtered.append(cost)
+                        time_set_filtered.append(time)
+                        traj_set_filtered.append((x,u))
+    return state_set_filtered, cost_set_filtered, time_set_filtered, traj_set_filtered
 
 
 # DYNAMICS FUNCTIONS: Trajectory
-def gen_trajectory(s0, s1, Ginv, tau, dt):
+def gen_trajectory(s0, s1, tau, dt):
     '''
     Generates the optimal trajectory connecting two points in state space
     
     Inputs:
         s0: initial state
         s1: final state
-        Ginv: inverse of weighted controllability gramian (pre-computed to speed up computation)
         tau: optimal connection time
         dt: time step
     '''
     sbar = expm(A*tau)@s0
+    Ginv = np.linalg.inv(gramian(tau))
     d = Ginv@(s1 - sbar)
     
     block_mat = bmat([[A,BRB.T],[None,-A.T]]).toarray()
@@ -169,8 +175,8 @@ def gen_trajectory(s0, s1, Ginv, tau, dt):
 
     return x_waypoints, u_waypoints
 
-def show_trajectory(ax, s0, s1, Ginv, tau, dt, c_='gray', linewidth_=0.5):
-    x_waypoints,_ = gen_trajectory(s0, s1, Ginv, tau, dt)
+def show_trajectory(ax, s0, s1, tau, dt, c_='gray', linewidth_=0.5):
+    x_waypoints,_ = gen_trajectory(s0, s1, tau, dt)
     M = np.zeros((4, int(np.abs(np.ceil(tau/dt)))))
     for i in range(len(x_waypoints)):
         M[:, i] = x_waypoints[i]

@@ -7,7 +7,7 @@ import time as tm
 import ray
 import pickle
 
-from utils import non_det_filter, filter_reachable, gramian, show_trajectory, find_frontier, find_candidates, gen_trajectory, gen_path
+from utils import non_det_filter, filter_reachable, show_trajectory, find_frontier, find_candidates, gen_trajectory, gen_path
 
 [k1, k2, A, B, R, BRB] = pickle.load(open('sp_var.pkl','rb'))
 
@@ -64,10 +64,10 @@ class World:
 
 class Safe_Planner:
     def __init__(self,
-                 world_box: np.ndarray = np.array([[0,0],[1,1]]),
-                 vx_range: list = [-0.1,0.1],
-                 vy_range: list = [0,0.1],
-                 goal: list = [0.6,0.8,0,0],
+                 world_box: np.ndarray = np.array([[0,0],[8,8]]),
+                 vx_range: list = [-4,4],
+                 vy_range: list = [0,4],
+                 goal: list = [6,7.8,0,0],
                  dt: float = 0.05, #time resolution for controls
                  sensor_dt: float = 1, #time resolution for perception update
                  r = 2, #cost threshold for reachability
@@ -75,7 +75,7 @@ class Safe_Planner:
                  FoV = np.pi/2, #field of view
                  n_samples = 1000,
                  max_search_iter = 1000,
-                 neighbor_radius = 0.1, #for non-dynamics planning
+                 neighbor_radius = 0.5, #for non-dynamics planning
                  seed = 0):
         # load inputs
         self.world_box = world_box
@@ -122,12 +122,12 @@ class Safe_Planner:
         def compute_reachable(node_idx):
             print(node_idx)
             node = self.Pset[node_idx]
-            fset, fdist, ftime = filter_reachable(node,self.Pset,self.r,self.vx_range,self.vy_range, 'F')
-            bset, bdist, btime = filter_reachable(node,self.Pset,self.r,self.vx_range,self.vy_range, 'B')
-            Ginv_i = []
-            for j in range(len(btime)):
-                Ginv_i.append(np.linalg.inv(gramian(btime[j])))
-            return (node_idx,(fset, fdist, ftime), (bset, bdist, btime, Ginv_i))
+            fset, fdist, ftime, ftraj = filter_reachable(node,self.Pset,self.r,self.vx_range,self.vy_range, 'F', self.dt)
+            bset, bdist, btime, btraj = filter_reachable(node,self.Pset,self.r,self.vx_range,self.vy_range, 'B', self.dt)
+            # Ginv_i = []
+            # for j in range(len(btime)):
+            #     Ginv_i.append(np.linalg.inv(gramian(btime[j])))
+            return (node_idx,(fset, fdist, ftime, ftraj), (bset, bdist, btime, btraj))
         
         ray.init()
         futures = [compute_reachable.remote(node_idx) for node_idx in range(len(self.Pset))]
@@ -217,8 +217,8 @@ class Safe_Planner:
         for i in range(len(idx_solution)-1):
             s0 = idx_solution[i] #idx
             s1 = idx_solution[i+1] #idx
-            Ginv = self.reachable[s1][2][3][self.reachable[s1][2][0].index(s0)]
-            show_trajectory(ax, self.Pset[s0],self.Pset[s1],Ginv,self.time[s1],self.dt, c_ = 'red', linewidth_ = 1)
+            # Ginv = self.reachable[s1][2][3][self.reachable[s1][2][0].index(s0)]
+            show_trajectory(ax, self.Pset[s0],self.Pset[s1],self.time[s1],self.dt, c_ = 'red', linewidth_ = 1)
         plt.show()
     
     def show_connection(self, idx_solution):
@@ -230,8 +230,8 @@ class Safe_Planner:
             if self.parent[i] != i:
                 # s1 = i #idx
                 s0 = self.parent[i] #idx
-                Ginv = self.reachable[i][2][3][self.reachable[i][2][0].index(s0)]
-                show_trajectory(ax, self.Pset[s0], self.Pset[i],Ginv,self.time[i],self.dt)
+                # Ginv = self.reachable[i][2][3][self.reachable[i][2][0].index(s0)]
+                show_trajectory(ax, self.Pset[s0], self.Pset[i],self.time[i],self.dt)
         for i in range(len(idx_solution)-1):
             s0 = idx_solution[i] #idx
             s1 = idx_solution[i+1] #idx
@@ -268,8 +268,9 @@ class Safe_Planner:
         for i in range(len(idx_solution)-1):
             s0 = idx_solution[i] #idx
             s1 = idx_solution[i+1] #idx
-            Ginv = self.reachable[s1][2][3][self.reachable[s1][2][0].index(s0)]
-            x_waypoint, u_waypoint = gen_trajectory(self.Pset[s0],self.Pset[s1],Ginv,self.time[s1],self.dt)
+            # Ginv = self.reachable[s1][2][3][self.reachable[s1][2][0].index(s0)]
+            # x_waypoint, u_waypoint = gen_trajectory(self.Pset[s0],self.Pset[s1],self.time[s1],self.dt)
+            x_waypoint, u_waypoint = self.reachable[s0][1][3][self.reachable[s0][1][0].index(s1)]
             x_waypoints.append(x_waypoint)
             u_waypoints.append(u_waypoint)
 
@@ -332,11 +333,13 @@ class Safe_Planner:
                 idx_incand_costmin = np.argmin(self.cost[idxset_cand] + distset_cand) #index in cand set
                 cost_new = min(self.cost[idxset_cand] + distset_cand)
                 time_new = timeset_cand[idx_incand_costmin]
-                Ginv = Ginv_candidate[idx_incand_costmin]
+                # Ginv = Ginv_candidate[idx_incand_costmin]
                 idx_parent = idxset_cand[idx_incand_costmin]
             
                 if dynamics:
-                    x_waypoints, _ = gen_trajectory(self.Pset[idx_parent],self.Pset[idx_near], Ginv, time_new, self.dt)
+                    # x_waypoints, _ = gen_trajectory(self.Pset[idx_parent],self.Pset[idx_near], time_new, self.dt)
+                    idx_nearinparentfset = self.reachable[idx_parent][1][0].index(idx_near)
+                    x_waypoints = self.reachable[idx_parent][1][3][idx_nearinparentfset][0]
                 else:
                     x_waypoints = gen_path(self.Pset[idx_parent],self.Pset[idx_near],self.dt*max(self.v_range))
 
