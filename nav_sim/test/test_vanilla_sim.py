@@ -15,6 +15,7 @@ import os
 import time
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 from omegaconf import OmegaConf
 
 from nav_sim.env.vanilla_env import VanillaEnv

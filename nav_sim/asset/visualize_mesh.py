@@ -21,7 +21,7 @@ if __name__ == "__main__":
     # super-category: {'Sofa': 2701, 'Chair': 1775, 'Lighting': 1921, 'Cabinet/Shelf/Desk': 5725, 'Table': 1090, 'Bed': 1124, 'Pier/Stool': 487, 'Others': 1740}
     # category_to_include = ('Chair', 'Pier/Stool')
     category_to_include = ['Chair']
-    style_to_include = ['Modern']
+    style_to_include = ['Modern', 'Industrial']
     theme_to_exclude = ['Cartoon']
     with open(os.path.join(args.mesh_folder, 'model_info.json'), 'r') as f:
         model_info = json.load(f)
@@ -46,18 +46,23 @@ if __name__ == "__main__":
 
     # Combine all the models
     model_info_all = sum(category_all.values(), [])
+    flag = True
 
     # Randomly visualize the meshes
     raw_model_name = 'raw_model.obj'
-    for _ in range(100):
-        model_info = random.choice(model_info_all)
+    print("Num environments", len(model_info_all))
+    for _, model_info in enumerate(model_info_all):
+        # model_info = random.choice(model_info_all)
         model_id, style, theme, material = model_info
-        piece = trimesh.load(
-            os.path.join(args.mesh_folder, model_id, raw_model_name)
-        )
-        print(f'Visualizing model_id: {model_id}')
-        print(f'Style: {style}, Theme: {theme}, Material: {material}')
-        print('Mesh x dimensions:', piece.bounds[:, 0])
-        print('Mesh y dimensions:', piece.bounds[:, 1])
-        print('Mesh z dimensions:', piece.bounds[:, 2])
-        piece.show()
+        if model_id == 'b32c48ad-02bc-450d-a858-7bddb0bb7ae9':
+            flag = True
+        if flag:
+            piece = trimesh.load(
+                os.path.join(args.mesh_folder, model_id, raw_model_name)
+            )
+            print(f'Visualizing model_id: {model_id}')
+            print(f'Style: {style}, Theme: {theme}, Material: {material}')
+            print('Mesh x dimensions:', piece.bounds[:, 0])
+            print('Mesh y dimensions:', piece.bounds[:, 1])
+            print('Mesh z dimensions:', piece.bounds[:, 2])
+            piece.show()

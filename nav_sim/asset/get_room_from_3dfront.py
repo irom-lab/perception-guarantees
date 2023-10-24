@@ -122,7 +122,7 @@ def process_mesh(category_all, task_id, args):
     piece_saved_bounds = []
     piece_id_all = []
     piece_pos_all = []
-    while num_furniture_saved < args.num_furniture_per_room:
+    while num_furniture_saved < int(args.num_furniture_per_room):
         category_chosen = random.choice(list(category_all.keys()))
         num_piece_category_available = len(category_all[category_chosen])
         model_id = category_all[category_chosen][
@@ -340,6 +340,11 @@ def process_mesh(category_all, task_id, args):
     task.goal_loc = [float(v) for v in goal_loc]
     task.piece_id_all = piece_id_all
     task.piece_pos_all = piece_pos_all
+    # print(piece_saved_bounds, len(piece_saved_bounds))
+    piece_bounds_list = [(np.resize(piece_saved_bounds[i],6)) for i in range(len(piece_saved_bounds))]
+    piece_bounds_list = [[float(piece_bounds_list[i][j]) for j in range(len(piece_bounds_list[i]))] for i in range(len(piece_bounds_list))]
+    # print(type(piece_pos_all[0]), type(piece_bounds_list[0]))
+    task.piece_bounds_all = piece_bounds_list
 
     # Pickle task
     with open(save_path + '/task.pkl', 'wb') as outfile:
@@ -377,7 +382,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         '--num_furniture_per_room', default=5, nargs='?',
-        help='number of furniture per room'
+        help='number of furniture per room, default 5'
     )
     parser.add_argument(
         '--room_dim', default=8, nargs='?', help='room dimension'
@@ -390,7 +395,7 @@ if __name__ == "__main__":
         '--min_init_goal_dist', default=7, nargs='?',
         help='min distance between init position and goal'
     )
-    parser.add_argument('--seed', default=42, nargs='?', help='random seed')
+    parser.add_argument('--seed', default=2, nargs='?', help='random seed')
     args = parser.parse_args()
 
     # cfg
@@ -399,9 +404,9 @@ if __name__ == "__main__":
     random.seed(args.seed)
     np.random.seed(args.seed)
 
-    # super-category: {'Sofa': 2701, 'Chair': 1775, 'Lighting': 1921, 'Cabinet/Shelf/Desk': 5725, 'Table': 1090, 'Bed': 1124, 'Pier/Stool': 487, 'Others': 1740}
+    # super-category: {'Sofa': 2701,'Chair': 1775, 'Lighting': 1921, 'Cabinet/Shelf/Desk': 5725, 'Table': 1090, 'Bed': 1124, 'Pier/Stool': 487, 'Others': 1740}
     category_to_include = ['Chair']  # 'Pier/Stool'
-    style_to_include = ['Modern']
+    style_to_include = ['Modern', 'Industrial']
     theme_to_exclude = ['Cartoon']
     with open(os.path.join(args.mesh_folder, 'model_info.json'), 'r') as f:
         model_info = json.load(f)
@@ -426,7 +431,7 @@ if __name__ == "__main__":
 
     num_processed = 0
     while num_processed < args.num_room:
-        print(f'Processing task {num_processed+1} out of {args.num_room}')
+        print('Processing task {} out of {}'.format(num_processed+1, args.num_room))
         num_processed += process_mesh(
             category_all,
             task_id=num_processed,

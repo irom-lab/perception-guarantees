@@ -276,7 +276,7 @@ def main(raw_args=None):
 
     ##################################################################
     # Number of environments
-    num_envs = 100
+    num_envs = 300
 
     # Number of parallel threads
     num_parallel = 12

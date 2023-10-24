@@ -27,7 +27,7 @@ python nav_sim/test/test_vanilla_sim.py
 Test environment with random tasks generated after following the instructions in the next section:
 
 ```console
-python nav_sim/test/test_task_sim.py
+python nav_sim/test/test_task_sim.py --task_dataset=/home/anushri/Documents/Projects/data/perception-guarantees/task.pkl --save_dataset=/home/anushri/Documents/Projects/data/perception-guarantees/task.npz
 ```
 
 Test vectorized environment:
@@ -38,18 +38,12 @@ python nav_sim/test/test_vec_sim.py
 
 ### Room generation
 
-1. Download the 5.1G furniture mesh data from the 3D-Front dataset (Allen has the whole original dataset, but it takes a while to process them). Right now, using 397 chair meshes.
-```console
-pip install gdown
-gdown 1VaKNDAq9iQvxtvDLGLmA6k7Hl0L0AJ7W
-pigz -dc 3D-FUTURE-model-tiny.file | pv | tar xf -           # fast unzip
-```
-
+1. Get the 3D-Front model dataset (TODO: upload to drive). Right now, using 397 chair meshes.
 2. Run script to generate the room configurations:
 ```console
-python nav_sim/asset/get_room_from_3dfront.py --save_task_folder=[folder to save the room configurations] --mesh_folder=[3D-Front model folder] --num_room --num_room_per_furniture --room_dim --min_obstacle_spacing --min_init_goal_dist
+python nav_sim/asset/get_room_from_3dfront.py --save_task_folder=/home/anushri/Documents/Projects/data/perception-guarantees/rooms --mesh_folder=/home/anushri/Documents/Projects/data/perception-guarantees/3D-FUTURE-model-tiny
 ```
 3. Generate task dataset by aggregating the room configurations:
 ```console
-python nav_sim/asset/get_task_dataset.py --save_path=[path to save the task dataset] --task_folder=[folder to the saved room configurations]
+python nav_sim/asset/get_task_dataset.py --save_path=/home/anushri/Documents/Projects/data/perception-guarantees/task.pkl --task_folder=/home/anushri/Documents/Projects/data/perception-guarantees/rooms
 ```

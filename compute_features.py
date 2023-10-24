@@ -14,9 +14,11 @@ import json
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import matplotlib.pyplot as plt
 
 from models import build_model
 from datasets import build_dataset
+from itertools import product, combinations
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = BASE_DIR
@@ -62,6 +64,8 @@ if __name__=='__main__':
     ###########################################################################
     # Get data
     data = np.load("data/training_data_raw.npz", allow_pickle=True)
+    # data = np.load("third_party/mmdetection3d-main/data/s3dis/s3dis_infos_Area_1.pkl", allow_pickle=True)
+    # data = np.load("/home/anushri/Documents/Projects/data/perception-guarantees/task.pkl", allow_pickle=True)
     data = data["data"]
 
     num_envs = len(data) # Number of environments where we collected data
@@ -70,7 +74,7 @@ if __name__=='__main__':
     num_pc_points = params["num_pc_points"] # Number of points in each point cloud
 
     # Batch size for processing inputs on GPU
-    batch_size = 2 # Cannot be too large since GPU runs out of memory
+    batch_size = 1 # Cannot be too large since GPU runs out of memory
 
     num_batches = int(num_cam_positions / batch_size)
     assert (num_cam_positions % batch_size) == 0, "batch_size must divide num_cam_positions."
@@ -110,7 +114,7 @@ if __name__=='__main__':
     ###########################################################################
 
     t_start = time.time()
-    for env in range(num_envs):
+    for env in range(1,num_envs):
 
         print("Env: ", env)
 
@@ -130,11 +134,11 @@ if __name__=='__main__':
             pc_all = torch.from_numpy(pc).to(device)
             pc_min_all = pc_all.min(1).values
             pc_max_all = pc_all.max(1).values
+            # print(pc_min_all.shape, pc_max_all.shape)
             inputs = {'point_clouds': pc_all, 'point_cloud_dims_min': pc_min_all, 'point_cloud_dims_max': pc_max_all}
 
             # Run through pre-trained 3DETR model
             outputs = model(inputs)
-
 
             #####################################
             # Save outputs from model
@@ -171,8 +175,42 @@ if __name__=='__main__':
             not_inside = data[env]["cam_not_inside_obs"][batch_inds]
             not_inside = torch.tensor(not_inside).to(device)
 
-
             loss_mask[env, batch_inds] =  torch.logical_and(is_visible, not_inside).float()
+            # print(loss_mask[env, batch_inds])
+
+            ######
+            corners_gt = pc_to_axis_aligned_rep(bboxes_ground_truth[env,:,:].numpy())
+            # print(corners_gt)
+
+            g0 = [corners_gt[0,0], corners_gt[1,0]]
+            g1 = [corners_gt[0,1], corners_gt[1,1]]
+            g2 = [corners_gt[0,2], corners_gt[1,2]]
+
+            plt.figure()
+            ax = plt.axes(projection='3d')
+            ax.scatter3D(
+                pc[0,pc[0,:,2]>0.1,0], pc[0,pc[0,:,2]>0.1,1],pc[0,pc[0,:,2]>0.1,2]
+            )
+
+            # bbox = bbox_pred_points[range(batch_size), box_inds, :, :]
+            corners = pc_to_axis_aligned_rep(bbox_pred_points.numpy())
+            r0 = [corners[0,0, 0], corners[0,1, 0]]
+            r1 = [corners[0,0, 1], corners[0,1, 1]]
+            r2 = [corners[0,0, 2], corners[0,1, 2]]
+            for s, e in combinations(np.array(list(product(r0, r1, r2))), 2):
+                if (np.sum(np.abs(s-e)) == r0[1]-r0[0] or np.sum(np.abs(s-e)) == r1[1]-r1[0] or np.sum(np.abs(s-e)) == r2[1]-r2[0]):
+                    ax.plot3D(*zip(s, e), color=(0.9, 0.1,0.1))
+
+            for s, e in combinations(np.array(list(product(g0, g1, g2))), 2):
+                if (np.sum(np.abs(s-e)) == g0[1]-g0[0] or np.sum(np.abs(s-e)) == g1[1]-g1[0] or np.sum(np.abs(s-e)) == g2[1]-g2[0]):
+                    ax.plot3D(*zip(s, e), color="g")
+
+            ax.set_xlabel('X')
+            ax.set_ylabel('Y')
+            ax.set_zlabel('Z')
+            ax.view_init(elev=90, azim=-90, roll=0)
+            plt.show()
+            #######
 
 
             #####################################
@@ -185,14 +223,14 @@ if __name__=='__main__':
 
 
     ###########################################################################
-    # Save processed feature data
-    torch.save(model_outputs_all, "data/features.pt")
+    # # Save processed feature data
+    # torch.save(model_outputs_all, "data/features.pt")
 
-    # Save ground truth bounding boxes
-    torch.save(bboxes_ground_truth_aligned, "data/bbox_labels.pt")
+    # # Save ground truth bounding boxes
+    # torch.save(bboxes_ground_truth_aligned, "data/bbox_labels.pt")
 
-    # Save loss mask
-    torch.save(loss_mask, "data/loss_mask.pt")
+    # # Save loss mask
+    # torch.save(loss_mask, "data/loss_mask.pt")
     ###########################################################################
 
 

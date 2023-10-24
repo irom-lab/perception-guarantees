@@ -19,8 +19,8 @@ class PointCloudDataset(Dataset):
         num_locations = self.features["box_features"].shape[1]
         self.bbox_labels = torch.load(bbox_labels_file)
         sb = self.bbox_labels.shape
-        self.bbox_labels = self.bbox_labels.view((sb[0], 1, sb[1], sb[2]))
-        self.bbox_labels = self.bbox_labels.expand(-1, num_locations, -1, -1)
+        self.bbox_labels = self.bbox_labels.view((sb[0], 1, sb[1], sb[2], sb[3]))
+        self.bbox_labels = self.bbox_labels.expand(-1, num_locations, -1, -1, -1)
 
 
     def __len__(self):
@@ -42,7 +42,7 @@ class PointCloudDataset(Dataset):
         loss_mask = self.loss_mask[idx, :]
 
         # Get label
-        labels = {'bboxes_gt': self.bbox_labels[idx, :, :, :],
-                'bboxes_3detr': self.bbox_3detr[idx, :, :, :]}
+        labels = {'bboxes_gt': self.bbox_labels[idx, :, :, :, :],
+                'bboxes_3detr': self.bbox_3detr[idx, :, :, :, :]}
 
         return features, labels, loss_mask
