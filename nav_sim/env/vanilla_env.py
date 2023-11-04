@@ -68,20 +68,20 @@ class VanillaEnv():
             self.reset_task(task)
             self.reset_obstacles(task)
 
-        # Reset robot state
-        self._state = task.init_state
+            # Reset robot state
+            self._state = task.init_state
 
-        # Reset robot
-        self.reset_robot(self._state)
+            # Reset robot
+            self.reset_robot(self._state)
 
-        # Reset camera
-        self.move_camera(self._state)
+            # Reset camera
+            self.move_camera(self._state)
 
-        # Reset timer
-        self.step_elapsed = 0
+            # Reset timer
+            self.step_elapsed = 0
 
-        # Return observation at current state
-        return self._get_obs(self._state)
+            # Return observation at current state
+            return self._get_obs(self._state)
 
     def reset_task(self, task):
         """

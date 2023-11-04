@@ -67,6 +67,7 @@ def main(task):
 if __name__ == '__main__':
     # get root repository path
     nav_sim_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    print('nav_sim_path: ', nav_sim_path)
 
     # Initialize task
     task = OmegaConf.create()
