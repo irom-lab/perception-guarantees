@@ -1,10 +1,10 @@
 import numpy as np
 import pickle
 
-k1= 0.1;k2= 0.2
+k1= 0.5;k2= 0.5
 A = np.array([[0,0,1,0],[0,0,0,1],[0,0,-k1,0],[0,0,0,-k2]])
 B = np.array([[0,0],[0,0],[k1,0],[0,k2]])
-R = np.array([[0.2,0],[0,0.2]])
+R = np.array([[0.5,0],[0,0.5]])
 
 BRB = B@np.linalg.inv(R)@B.T
 

@@ -11,8 +11,7 @@ from matplotlib.patches import Rectangle
 
 import pickle
 
-[k1, k2, A, B, R, BRB] = pickle.load(open('sp_var.pkl','rb'))
-
+[k1, k2, A, B, R, BRB] = pickle.load(open('planning/sp_var.pkl','rb'))
 
 # WORLD FUNCTIONS
 def overlap(a, b): # 2d implementation
@@ -42,23 +41,28 @@ def non_det_filter(xbar_prev, xhat_now):
     
     output: xbar_now, updated estimate of occ_space
     '''
-    if len(xbar_prev) == 0:
-        return xhat_now
+    ab_all = []
+    for a in xbar_prev:
+        for b in xhat_now:
+            # print(ab)
+            ab = overlap(a, b)
+            if np.all(a==ab) and np.all(b==ab):
+                # a,b same box, keep one
+                ab_all.append(ab)
+            elif (ab is None):
+                # no overlap
+                continue
+            else:
+                ab_all.append(ab)
+    if len(ab_all) == 0:
+        return []
     else:
-        ab_all = []
-        for a in xbar_prev:
-            for b in xhat_now:
-                # print(ab)
-                ab = overlap(a, b)
-                if (np.any(np.all(a == ab))) or (np.any(np.all(b == ab))) or (ab is None):
-                    continue
-                else:
-                    ab_all.append(ab)
-        if len(ab_all) == 0:
-            return []
-        else:
-            xbar_now = np.concatenate(ab_all)
-            return xbar_now
+        ab_all_unique = []
+        for ab in ab_all:
+            if not any(np.all(ab == x) for x in ab_all_unique):
+                ab_all_unique.append(ab)
+        xbar_now = np.concatenate(ab_all)
+        return xbar_now
         
 
 # DYNAMICS FUNCTIONS: Reachability
@@ -74,9 +78,9 @@ def cost_optimal(state0, state1, r):
     def cost(t):
         x = state1-expm(A*t)@state0
         G = gramian(t)
-        if np.linalg.det(G) == 0:
+        # if np.linalg.det(G) == 0:
             # G = G + np.eye(4)
-            print(G)
+            # print(G)
         c =t+x.T@np.linalg.inv(G)@x
         return c
     
@@ -87,9 +91,11 @@ def forward_box(state, r, vx_range, vy_range):
     '''rough filtering of forward-reachable set'''
     vxmax = max(vx_range)
     vymax = max(vy_range)
+    vxmin = min(vx_range)
+    vymin = min(vy_range)
     # cost >= time, so t_max = r
     xmax,ymax = state[0:2] + r*np.array([vxmax,vymax])
-    xmin,ymin = state[0:2]
+    xmin,ymin = state[0:2] + r*np.array([vxmin,vymin])
     return xmax,ymax,xmin,ymin
 
 def backward_box(state, r, vx_range, vy_range):
@@ -139,8 +145,11 @@ def filter_reachable(state: np.ndarray, state_set: list, r, vx_range, vy_range, 
                 elif direction == 'B':
                     cost, time = cost_optimal(state_i, state, r)
                 if cost <= r:
-                    x,u = gen_trajectory(state, state_i, time, dt)
-                    if np.all(min(vx_range)<=u[:,0]) and np.all(u[:,0]<=max(vx_range)) and np.all(min(vy_range)<=u[:,1]) and np.all(u[:,1]<=max(vy_range)):
+                    if direction == 'F':
+                        x,u = gen_trajectory(state, state_i, time, dt)
+                    elif direction == 'B':
+                        x,u = gen_trajectory(state_i, state, time, dt)
+                    if np.all(-4<=u[:,0]) and np.all(u[:,0]<=4) and np.all(-4<=u[:,1]) and np.all(u[:,1]<=4):
                         state_set_filtered.append(idx)
                         cost_set_filtered.append(cost)
                         time_set_filtered.append(time)
@@ -173,7 +182,7 @@ def gen_trajectory(s0, s1, tau, dt):
     x_waypoints = waypoints[0:4,:].T
     u_waypoints = (np.linalg.inv(R)@B.T@waypoints[4:,:]).T
 
-    return x_waypoints, u_waypoints
+    return x_waypoints[::-1], u_waypoints[::-1]
 
 def show_trajectory(ax, s0, s1, tau, dt, c_='gray', linewidth_=0.5):
     x_waypoints,_ = gen_trajectory(s0, s1, tau, dt)
@@ -187,6 +196,7 @@ def gen_path(s0, s1, dx):
     dx, dy = s1[0] - s0[0], s1[1] - s0[1]
     yaw = np.arctan2(dy, dx)
     d = np.hypot(dx, dy)
+    print(d,dx)
     steps = np.arange(0, d, dx).reshape(-1, 1)
     pts = s0[0:2] + steps * np.array([np.cos(yaw), np.sin(yaw)])
     return np.vstack((pts, s1[0:2]))
@@ -220,7 +230,7 @@ def line_intersection(line1, line2):
     y = det(d, ydiff) / div
     return [x, y]
 
-def find_frontier(xbar_now, world_box, start, FoV):
+def find_frontier(xbar_now, world_box, start, FoV, polygon=False):
     '''
     Finds the unknown frontier
     
@@ -233,8 +243,8 @@ def find_frontier(xbar_now, world_box, start, FoV):
     Output:
         frontier: dictionary of rays and corresponding segments
     '''
-    ray_left = start[2]+FoV/2
-    ray_right = start[2]-FoV/2
+    ray_left = np.pi/2+FoV/2
+    ray_right = np.pi/2-FoV/2
     box_vertices = {}
     vertex_rays = {'left':ray_left,'right':ray_right}
     rays = []
@@ -281,7 +291,7 @@ def find_frontier(xbar_now, world_box, start, FoV):
                     if np.any(np.all(edge == vertex, axis = 1)): # this edge is for this vertex
                         continue
                     else:
-                        if intersect(edge[0],edge[1],ray_line[0],ray_line[1]):
+                        if intersect(edge[0],edge[1],ray_line[0],ray_line[1]) and not polygon:
                             show = False
             else: # different box
                 # discard rays blocked by other boxes
@@ -295,7 +305,8 @@ def find_frontier(xbar_now, world_box, start, FoV):
                         dist_to_vertex = np.linalg.norm(vertex-np.array(start[0:2]))
                         if dist_to_edge < dist_to_vertex:
                             # print('different box', edge, ray, intersection, dist_to_edge, dist_to_vertex)
-                            show = False
+                            if not polygon:
+                                show = False
                         else:
                             segments.append(np.array([vertex, intersection]))
                         
@@ -303,8 +314,10 @@ def find_frontier(xbar_now, world_box, start, FoV):
             rays.append(ray)
             segments_len = np.array([np.linalg.norm(segment[0]-segment[1]) for segment in segments])
             frontier[ray] = segments[np.argmin(segments_len)]
-    
-    return frontier
+    if polygon:
+        return frontier, box_vertices, world_edges
+    else:
+        return frontier
 
 def find_candidates(frontier, radius):
     '''find subgoal candidates'''
@@ -317,12 +330,12 @@ def find_candidates(frontier, radius):
             candidates.append(segment[0] + np.array([2*(i+1/2)*radius*np.cos(ray_angle),2*(i+1/2)*radius*np.sin(ray_angle)]))
     return candidates
 
-def plot_frontier(occ_space, world_box, start, FoV):
+def plot_frontier(occ_space, world_box, start, FoV,radius):
     segments_dict = find_frontier(occ_space, world_box, start, FoV)
-    candidates = find_candidates(segments_dict, 0.05)
+    candidates = find_candidates(segments_dict, radius)
     fig, ax = plt.subplots()
-    ax.set_xlim([0,1])
-    ax.set_ylim([0,1])
+    ax.set_xlim([0,world_box[1][0]])
+    ax.set_ylim([0,world_box[1][1]])
     for i in range(occ_space.shape[0]):
         w = occ_space[i,1,0] - occ_space[i,0,0]
         h = occ_space[i,1,1] - occ_space[i,0,1]
