@@ -6,38 +6,66 @@ from matplotlib.patches import Rectangle
 import time as tm
 import pickle
 
-from planning.utils import non_det_filter, filter_reachable, show_trajectory, find_frontier, find_candidates, gen_trajectory, gen_path
+from shapely.geometry import Point, MultiPolygon, Polygon, LineString
+from shapely.ops import unary_union
+from shapely.geometry.polygon import orient
+
+from planning.utils import turn_box, non_det_filter, filter_reachable, show_trajectory, find_frontier, find_candidates, gen_trajectory, gen_path, trace_polygon, find_polygon
 
 [k1, k2, A, B, R, BRB] = pickle.load(open('planning/sp_var.pkl','rb'))
 
+
+class Ray:
+    def __init__(self, angle, vert):
+        self.start = vert[0]
+        self.end = vert[1]
+        self.angle = angle
+    def find_box(self, geoms, frontier, world):
+        self.start_box = LineString([[0,0],[0,0]])
+        self.end_box = LineString([[0,0],[0,0]])
+        ab = LineString(frontier[self.angle])
+        x = ab.intersection(world)
+        if not x.is_empty:
+            self.end_box = world
+        for geom in geoms:
+            geom_buff = geom.buffer(1e-7)
+            x = ab.intersection(geom_buff)
+            
+            if not x.is_empty:
+                x_coords = np.array([x.coords.xy[0][0],x.coords.xy[1][0]])
+                if np.all(abs(self.start-x_coords)<1e-5):
+                    self.start_box = geom.boundary
+                elif np.all(abs(self.end-x_coords)<1e-5):
+                    self.end_box = geom.boundary
 
 class World:
     def __init__(self, world_box):
         self.w = world_box[1,0] - world_box[0,0]
         self.h = world_box[1,1] - world_box[0,1]
-        self.occ_space = np.array([])
+        # self.occ_space = np.array([])
         self.counter = 0
 
     def update(self, new_boxes):
         '''Applies nondeterministic filter to update estimate of occupancy space'''
         new_occ_space = np.array(new_boxes)
-        # if new_occ_space.ndim == 1:
-        #     new_occ_space = np.array([new_occ_space])
+        world = Polygon([[0,0],[0,self.h],[self.w,self.h],[self.w,0],[0,0]])
         if self.counter == 0:
-            self.occ_space = new_occ_space
+            self.occ_space = unary_union(turn_box(new_occ_space))
         else:
             self.occ_space = non_det_filter(self.occ_space, new_occ_space)
+        
+        if self.occ_space.geom_type == 'Polygon':
+            self.occ_space = MultiPolygon([self.occ_space])
+        
+        self.occ_space.simplify(1e-5)
+        self.occ_space = MultiPolygon([orient(s, sign=-1.0) for s in self.occ_space.geoms])
+        self.free_space = world.difference(self.occ_space)
         self.counter += 1
 
     def isValid(self, state):
         '''Collision check'''
-        for i in range(len(self.occ_space)):
-            if (state[0] >= self.occ_space[i,0,0] 
-                and state[0] <= self.occ_space[i,1,0] 
-                and state[1] >= self.occ_space[i,0,1] 
-                and state[1] <= self.occ_space[i,1,1]):
-                return False
-        return True
+        
+        return self.free_space.buffer(1e-5).contains(Point(state[0],state[1]))
     
     def isValid_multiple(self, states):
         '''Check collision for multiple points'''
@@ -61,10 +89,11 @@ class World:
         fig, ax = plt.subplots()
         ax.set_xlim([0,self.w])
         ax.set_ylim([0,self.h])
-        for i in range(len(self.occ_space)):
-            w = self.occ_space[i,1,0] - self.occ_space[i,0,0]
-            h = self.occ_space[i,1,1] - self.occ_space[i,0,1]
-            ax.add_patch(Rectangle(self.occ_space[i,0,:],w, h, edgecolor = 'k',fc=(0, 0.4470, 0.7410,0.5)))
+        if self.occ_space.geom_type == 'Polygon':
+            self.occ_space = MultiPolygon([self.occ_space])
+        for geom in self.occ_space.geoms:    
+            xs, ys = geom.exterior.xy    
+            ax.fill(xs,ys, edgecolor = 'k',fc=(0, 0.4470, 0.7410,0.5))
         return fig, ax
     
     def show_occlusion(self,polygons):
@@ -171,16 +200,12 @@ class Safe_Planner:
         '''Returns best intermediate goal to explore'''
         start = self.Pset[start_idx]
         v = np.sqrt(start[2]**2 + start[3]**2)
-        # goal_reachable = self.reachable[-1]       
-        # start_reachable = self.reachable[0]
         
         frontier = find_frontier(self.world.occ_space, self.world_box, start, self.FoV) # list of [x_start, y_start, x_end, y_end]
         candidates = find_candidates(frontier, self.radius) # list of segment midpoints
 
         costs = []
         subgoal_idxs = []
-
-        # print('candidates: ', candidates)
         
         for subgoal in candidates:
             subgoal_idx = np.argmin(np.linalg.norm(np.array(self.Pset)[:,0:2] - subgoal, axis=1))
@@ -190,32 +215,39 @@ class Safe_Planner:
                 costs.append(np.inf)
             else:
                 subgoal = self.Pset[subgoal_idx]
-                # subgoal_reachable = self.reachable[subgoal_idx]
                 # cost to come
-                # self.Pset[-1] = subgoal
-                # self.reachable[-1] = subgoal_reachable
                 _, _, cost_to_come = self.solve(start_idx, ICS=False)
                 # cost to go
-                # self.Pset[0] = subgoal
-                # self.reachable[0] = subgoal_reachable
-                # self.Pset[-1] = self.goal
-                # self.reachable[-1] = goal_reachable
                 start_idx = subgoal_idx
                 _, _, dist_to_go = self.solve(start_idx, dynamics=False, ICS=False)
                 # append + return to original
                 costs.append(cost_to_come + dist_to_go/v)
-                # self.Pset[0] = start
-                # self.reachable[0] = start_reachable
         
-        # print('costs: ', costs)
         if all(np.isinf(costs)):
-            # print('FF')
             return None, None
         else:
             idx_incost = np.argmin(costs)
             self.goal_idx = subgoal_idxs[idx_incost]
             return self.Pset[subgoal_idxs[idx_incost]], self.reachable[subgoal_idxs[idx_incost]]
-            # return self
+
+    def occlusion(self, start_idx):
+        '''Returns occlusion polygon'''
+        start = self.Pset[start_idx][0:2]
+        world = LineString([[0,0],[0,self.world.h],[self.world.w,self.world.h],[self.world.w,0],[0,0]])
+
+        frontier = find_frontier(self.world.occ_space, self.world_box, start, self.FoV)
+
+        rays = list(frontier.keys())
+        rays.sort()
+
+        ray_objects = []
+        for ray in rays:
+            ray_object = Ray(ray,frontier[ray])
+            ray_object.find_box(self.world.occ_space.geoms, frontier, world)
+            ray_objects.append(ray_object)
+        
+        vs = find_polygon(ray_objects, world)
+        return Polygon(vs)        
 
     # plots
     def plot_reachable(self, direction):
@@ -296,6 +328,7 @@ class Safe_Planner:
 
         plt.show()
 
+
     # safety planning algorithm
     def plan(self, state, new_boxes): 
         #plan at new sensor time step when we get new boxes
@@ -307,9 +340,9 @@ class Safe_Planner:
         # finds nearest sampled node to current state
         start_idx = np.argmin(np.linalg.norm(np.array(self.Pset) - np.array(state),axis=1))
         self.goal_idx = self.n_samples
-        # self.bool_open[start_idx] = True
-        # self.bool_unvisit[start_idx] = False
-        print(start_idx)
+        
+        # occlusion
+        self.world.free_space = self.occlusion(start_idx)
 
         # initialize planner
         self.cost = np.zeros(self.n_samples+1)
@@ -328,6 +361,7 @@ class Safe_Planner:
             node = self.Pset[node_idx]
             if not self.world.isValid(node):
                 self.bool_valid[node_idx] = False
+        end2 = tm.time()
         
         # solve
         idx_solution, goal_flag, _ = self.solve(start_idx)
@@ -336,10 +370,9 @@ class Safe_Planner:
             goal_loc, goal_reach = self.goal_inter(start_idx)
             if goal_loc is None:
                 goal_flag = -1
-                print('planning failed')
+                print('planning failed, stay')
                 break
             else:
-                # self.Pset[-1], self.reachable[-1] = goal_loc, goal_reach
                 self.goal_explored.append(self.Pset[self.goal_idx][0:2])
                 print('intermediate goal: ', self.Pset[self.goal_idx])
 
@@ -349,14 +382,11 @@ class Safe_Planner:
                 self.time_to_come = np.zeros(self.n_samples+1)
                 self.parent = np.arange(0,self.n_samples+1,1, dtype=int)
                 self.bool_unvisit = np.ones(self.n_samples+1, dtype=bool)
-                # self.bool_open[start_idx] = True
                 self.bool_closed = np.zeros(self.n_samples+1, dtype=bool)
                 self.bool_open = np.zeros(self.n_samples+1, dtype=bool)
-                # self.bool_valid = np.ones(self.n_samples+1, dtype=bool)
                 self.itr = 0
                 
                 idx_solution, goal_flag, _ = self.solve(start_idx)
-                # print(goal_flag)
             # break
         if goal_flag == 1:
             print('goal reached')
@@ -374,7 +404,7 @@ class Safe_Planner:
             u_waypoints.append(u_waypoint)
 
         end = tm.time()
-        print('time: ', end-start)
+        print('planning time: ', end-start)
         return idx_solution, x_waypoints, u_waypoints
 
     def solve(self, start_idx, dynamics = True, ICS = True):
