@@ -9,6 +9,11 @@ from scipy.sparse import bmat
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
+from shapely.geometry import box, Polygon, LineString
+from shapely.ops import unary_union
+
+
+
 import pickle
 
 [k1, k2, A, B, R, BRB] = pickle.load(open('planning/sp_var.pkl','rb'))
@@ -32,6 +37,12 @@ def overlap(a, b): # 2d implementation
         # return np.array([a, b])
         return None
 
+def turn_box(b_list):
+    box_list = []
+    for b in b_list:
+        box_list.append(box(b[0][0],b[0][1],b[1][0],b[1][1]))
+    return box_list
+
 def non_det_filter(xbar_prev, xhat_now):
     '''
     implements non-deterministic filter
@@ -41,6 +52,7 @@ def non_det_filter(xbar_prev, xhat_now):
     
     output: xbar_now, updated estimate of occ_space
     '''
+    '''old method
     ab_all = []
     for a in xbar_prev:
         for b in xhat_now:
@@ -62,7 +74,11 @@ def non_det_filter(xbar_prev, xhat_now):
             if not any(np.all(ab == x) for x in ab_all_unique):
                 ab_all_unique.append(ab)
         xbar_now = np.concatenate(ab_all)
-        return xbar_now
+        return xbar_now'''
+    # using shapely
+    xhat_all = unary_union(turn_box(xhat_now))
+    return xhat_all.intersection(xbar_prev)
+    
         
 
 # DYNAMICS FUNCTIONS: Reachability
@@ -205,7 +221,7 @@ def gen_path(s0, s1, dx):
 # SUBGOAL FUNCTIONS
 def ccw(A,B,C):
     # https://bryceboe.com/2006/10/23/line-segment-intersection-algorithm/
-    return (C[1]-A[1]) * (B[0]-A[0]) > (B[1]-A[1]) * (C[0]-A[0])
+    return (C[1]-A[1]) * (B[0]-A[0]) >= (B[1]-A[1]) * (C[0]-A[0])
 
 def intersect(A,B,C,D):
     # Return true if line segments AB and CD intersect
@@ -256,16 +272,16 @@ def find_frontier(xbar_now, world_box, start, FoV, polygon=False):
     
     # create {box: 4 vertices}
     # find all rays corresponding to all vertices
-    for i in range(len(xbar_now)):
-        obstacle = xbar_now[i]
-        vertices = [obstacle[0],np.array([obstacle[1][0],obstacle[0][1]]),obstacle[1],np.array([obstacle[0][0],obstacle[1][1]])]
-        box_vertices[i] = vertices
-        for j in range(len(vertices)):
-            vertex = vertices[j]
+    for i in range(len(xbar_now.geoms)):
+        obstacle = xbar_now.geoms[i]
+        # vertices = [obstacle[0],np.array([obstacle[1][0],obstacle[0][1]]),obstacle[1],np.array([obstacle[0][0],obstacle[1][1]])]
+        vertx,verty = obstacle.exterior.xy
+        box_vertices[i] = np.array([vertx,verty]).T
+        for j in range(len(vertx)):
+            vertex = np.array([vertx[j],verty[j]])
             ray = np.mod(np.arctan2(vertex[1]-start[1],vertex[0]-start[0]),2*np.pi)
             if ray_right <= ray <= ray_left: # vertex is in FoV
                 vertex_rays[vertex.tobytes()] = ray
-    
     # discard rays in the way
     for vert, ray in vertex_rays.items():
         show = True
@@ -284,29 +300,31 @@ def find_frontier(xbar_now, world_box, start, FoV, polygon=False):
 
         # for this ray, look at each box
         for box, vertices in box_vertices.items():
-            edges =np.array([[vertices[i],vertices[(i+1)%4]] for i in range(4)])
-            if np.any(np.all(vertices == vertex, axis = 1)): # same box
+            # edges =np.array([[vertices[i],vertices[(i+1)%4]] for i in range(4)])
+            b = xbar_now.geoms[box].boundary.coords
+            edges = [LineString(b[k:k+2]) for k in range(len(b) - 1)]
+            if np.any(abs(vertices - vertex)<1e-5): # same box
                 # make sure ray doesn't intersect with its own box
                 for edge in edges:
+                    edge = np.array(edge.coords)
                     if np.any(np.all(edge == vertex, axis = 1)): # this edge is for this vertex
                         continue
                     else:
-                        if intersect(edge[0],edge[1],ray_line[0],ray_line[1]) and not polygon:
+                        if intersect(edge[0],edge[1],ray_line[0],ray_line[1]): # and not polygon:
                             show = False
             else: # different box
                 # discard rays blocked by other boxes
                 # get edges
                 for edge in edges:
+                    edge = np.array(edge.coords)
                     # find intersection
                     if intersect(edge[0],edge[1],ray_line[0],ray_line[1]):
                         intersection = line_intersection(edge, ray_line)
                         # compute distance
                         dist_to_edge = np.linalg.norm(np.array(intersection)-np.array(start[0:2]))
                         dist_to_vertex = np.linalg.norm(vertex-np.array(start[0:2]))
-                        if dist_to_edge < dist_to_vertex:
-                            # print('different box', edge, ray, intersection, dist_to_edge, dist_to_vertex)
-                            if not polygon:
-                                show = False
+                        if dist_to_edge <= dist_to_vertex:
+                            show = False
                         else:
                             segments.append(np.array([vertex, intersection]))
                         
@@ -315,7 +333,7 @@ def find_frontier(xbar_now, world_box, start, FoV, polygon=False):
             segments_len = np.array([np.linalg.norm(segment[0]-segment[1]) for segment in segments])
             frontier[ray] = segments[np.argmin(segments_len)]
     if polygon:
-        return frontier, box_vertices, world_edges
+        return frontier, box_vertices
     else:
         return frontier
 
@@ -334,13 +352,104 @@ def plot_frontier(occ_space, world_box, start, FoV,radius):
     segments_dict = find_frontier(occ_space, world_box, start, FoV)
     candidates = find_candidates(segments_dict, radius)
     fig, ax = plt.subplots()
-    ax.set_xlim([0,world_box[1][0]])
-    ax.set_ylim([0,world_box[1][1]])
-    for i in range(occ_space.shape[0]):
-        w = occ_space[i,1,0] - occ_space[i,0,0]
-        h = occ_space[i,1,1] - occ_space[i,0,1]
-        ax.add_patch(Rectangle(occ_space[i,0,:],w, h, edgecolor = 'k',fc=(0, 0.4470, 0.7410,0.5)))
+    ax.set_xlim([-0.1,world_box[1][0]+0.1])
+    ax.set_ylim([-0.1,world_box[1][1]+0.1])
+    for geom in occ_space.geoms:    
+            xs, ys = geom.exterior.xy    
+            ax.fill(xs,ys, edgecolor = 'k',fc=(0, 0.4470, 0.7410,0.5))
     for segment in segments_dict.values():
         ax.plot([segment[0,0],segment[1,0]],[segment[0,1],segment[1,1]])
-    ax.scatter(*zip(*candidates))
+    if len(candidates) > 0:
+        ax.scatter(*zip(*candidates))
     plt.show()
+
+# OCCLUSION FUNCTIONS
+def trace_polygon(ray1_, ray2_, same_box, world):
+    box_x,box_y = same_box.coords.xy
+    # find indices where each ray intersects with box
+    ray1_x_inter = np.where(abs(np.array(box_x) - ray1_[0])<1e-5)[0]
+    ray1_y_inter = np.where(abs(np.array(box_y) - ray1_[1])<1e-5)[0]
+    ray2_x_inter = np.where(abs(np.array(box_x) - ray2_[0])<1e-5)[0]
+    ray2_y_inter = np.where(abs(np.array(box_y) - ray2_[1])<1e-5)[0]
+    
+
+    if len(ray1_x_inter) != 0 and len(ray1_y_inter) == 0: # vertical middle
+        # consecutive indices means ray is inbetween the two vertices
+        start_idx = np.where(np.diff(ray1_x_inter) == 1)[0]+1
+        for i in start_idx:
+            # check if ray1_y is inbetween the two vertices
+            if (box_y[ray1_x_inter[i]] <= ray1_[1] <= box_y[ray1_x_inter[i]-1] or 
+                box_y[ray1_x_inter[i]-1] <= ray1_[1] <= box_y[ray1_x_inter[i]]):
+                box_start_idx = ray1_x_inter[i]
+                break
+    elif len(ray1_y_inter) != 0 and len(ray1_x_inter) == 0: # horizontal middle
+        start_idx = np.where(np.diff(ray1_y_inter) == 1)[0]+1
+        for i in start_idx:
+            if (box_x[ray1_y_inter[i]] <= ray1_[0] <= box_x[ray1_y_inter[i]-1] or 
+                box_x[ray1_y_inter[i]-1] <= ray1_[0] <= box_x[ray1_y_inter[i]]):
+                box_start_idx = ray1_y_inter[i]
+                break
+    elif len(ray1_y_inter) != 0 and len(ray1_x_inter) != 0: # corner
+        box_start_idx = list(set(ray1_x_inter).intersection(ray1_y_inter))[0]
+    
+    # repeat for ray2
+    if len(ray2_x_inter) != 0 and len(ray2_y_inter) == 0:
+        end_idx = np.where(np.diff(ray2_x_inter) == 1)[0]+1
+        for i in end_idx:
+            if (box_y[ray2_x_inter[i]] <= ray2_[1] <= box_y[ray2_x_inter[i]-1] or 
+                box_y[ray2_x_inter[i]-1] <= ray2_[1] <= box_y[ray2_x_inter[i]]):
+                box_end_idx = ray2_x_inter[i]
+                break
+    elif len(ray2_y_inter) != 0 and len(ray2_x_inter) == 0:
+        end_idx = np.where(np.diff(ray2_y_inter) == 1)[0]+1
+        for i in end_idx:
+            if (box_x[ray2_y_inter[i]] <= ray2_[0] <= box_x[ray2_y_inter[i]-1] or 
+                box_x[ray2_y_inter[i]-1] <= ray2_[0] <= box_x[ray2_y_inter[i]]):
+                box_end_idx = ray2_y_inter[i]
+                break
+    elif len(ray2_y_inter) != 0 and len(ray2_x_inter) != 0:
+        box_end_idx = list(set(ray2_x_inter).intersection(ray2_y_inter))[0]
+    
+    if box_start_idx > box_end_idx and same_box==world:
+        return np.array(same_box.coords.xy)[:,box_end_idx:box_start_idx].T
+    elif box_start_idx > box_end_idx:
+        return np.hstack((
+            np.array(same_box.coords.xy)[:,box_start_idx:len(same_box.coords.xy[0])],
+            np.array(same_box.coords.xy)[:,1:box_end_idx])).T
+    else:
+        return np.array(same_box.coords.xy)[:,box_start_idx:box_end_idx].T
+
+def find_polygon(ray_objects, world): # the most promising one
+    
+    vs = [ray_objects[0].start,ray_objects[0].end]
+
+    for i in range(len(ray_objects)-1):
+        ray1 = ray_objects[i]
+        ray2 = ray_objects[i+1]
+        
+        if ray1.end_box == ray2.end_box and (ray1.start_box != ray2.start_box or
+                                             ray1.start_box == ray2.start_box == LineString([[0,0],[0,0]])):
+            v_bet = trace_polygon(ray1.end,ray2.end,ray1.end_box, world)
+            for v in v_bet:
+                vs.append(v)
+            vs.append(ray2.end)
+            vs.append(ray2.start)
+        elif ray1.start_box == ray2.start_box:
+            v_bet = trace_polygon(ray1.start,ray2.start,ray1.start_box, world)
+            for v in v_bet:
+                vs.append(v)
+            vs.append(ray2.start)
+            vs.append(ray2.end)
+        elif ray1.start_box == ray2.end_box:
+            v_bet = trace_polygon(ray1.start,ray2.end,ray1.start_box, world)
+            for v in v_bet:
+                vs.append(v)
+            vs.append(ray2.end)
+            vs.append(ray2.start)
+        elif ray1.end_box == ray2.start_box:
+            v_bet = trace_polygon(ray1.end,ray2.start,ray1.end_box, world)
+            for v in v_bet:
+                vs.append(v)
+            vs.append(ray2.start)
+            vs.append(ray2.end)
+    return vs
