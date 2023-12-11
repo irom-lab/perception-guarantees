@@ -64,6 +64,11 @@ Generate task dataset by aggregating the room configurations:
 ```console
 python nav_sim/asset/get_task_dataset.py --save_path=/home/anushri/Documents/Projects/data/perception-guarantees/task.pkl --task_folder=/home/anushri/Documents/Projects/data/perception-guarantees/rooms
 ```
+
+Test environment with random tasks generated:
+```console
+python nav_sim/test/test_task_sim.py --task_dataset=/home/anushri/Documents/Projects/data/perception-guarantees/task.pkl
+```
 Use above task dataset to test the environment with random locations in each room. This code will 
 1. Generate the pointclouds through the pybullet sim (we're using the ZED2i camera parameters)
 2. Compute the features using 3DETR for each pointcloud in each location of every environment
