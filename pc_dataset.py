@@ -25,6 +25,9 @@ class PointCloudDataset(Dataset):
 
     def __len__(self):
         return self.bbox_labels.shape[0]
+    
+    def __numobjects__(self):
+        return self.bbox_labels.shape[2]
 
     def __getitem__(self, idx):
         '''

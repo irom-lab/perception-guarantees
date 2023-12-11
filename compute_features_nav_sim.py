@@ -56,7 +56,7 @@ if __name__=='__main__':
 
     device = torch.device("cuda")
 
-    visualize = True
+    visualize = False
     ###########################################################################
 
     ###########################################################################
@@ -71,7 +71,7 @@ if __name__=='__main__':
     # data = np.load("data/training_data_raw.npz", allow_pickle=True)
     # data = np.load("third_party/mmdetection3d-main/data/s3dis/s3dis_infos_Area_1.pkl", allow_pickle=True)
     # data = np.load("/home/anushri/Documents/Projects/data/perception-guarantees/task_with_lidar500rooms-floor.npz", allow_pickle=True)
-    filename = "/home/anushri/Documents/Projects/data/perception-guarantees/multiple_chairs_dataset/task_camera.npz"
+    filename = "/home/anushri/Documents/Projects/data/perception-guarantees/prior_dataset/task_camera.npz"
     num_files = 10
     for i in range(num_files):
         file_ = filename[:-4] + str(i+1) + ".npz"
@@ -85,7 +85,7 @@ if __name__=='__main__':
     num_envs = len(data) # Number of environments where we collected data
     num_chairs = len(data[0]["bbox_world_frame_vertices"])
     num_cam_positions = len(data[0]['cam_positions']) # Number of camera locations in this environment
-    num_boxes= 10
+    num_boxes= 15
     print(num_cam_positions)
 
     num_pc_points = params["num_pc_points"] # Number of points in each point cloud
@@ -269,7 +269,7 @@ if __name__=='__main__':
                             bb1 = (cc_keep[0,0,0],cc_keep[0,0,1],cc_keep[0,1,0],cc_keep[0,1,1])
                             bb2 = (cc[0,0,0],cc[0,0,1],cc[0,1,0],cc[0,1,1])
                             # Non-maximal supression, check if IoU more than some threshold to keep box
-                            if(box2d_iou(bb1,bb2) > 0.1):
+                            if(box2d_iou(bb1,bb2) > 0):
                                 flag = True
                         if not flag:    
                             corners.append(cc)
@@ -380,13 +380,13 @@ if __name__=='__main__':
 
     ###########################################################################
     # # Save processed feature data
-    torch.save(model_outputs_all, "data/features_multiple_chairs.pt")
+    torch.save(model_outputs_all, "data/features_prior.pt")
 
     # # Save ground truth bounding boxes
-    torch.save(bboxes_ground_truth_aligned, "data/bbox_labels_multiple_chairs.pt")
+    torch.save(bboxes_ground_truth_aligned, "data/bbox_labels_prior.pt")
 
     # # Save loss mask
-    torch.save(loss_mask, "data/loss_mask_multiple_chairs.pt")
+    torch.save(loss_mask, "data/loss_mask_prior.pt")
     ###########################################################################
 
 

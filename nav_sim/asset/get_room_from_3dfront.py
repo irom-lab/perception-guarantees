@@ -395,7 +395,7 @@ if __name__ == "__main__":
         '--min_init_goal_dist', default=7, nargs='?',
         help='min distance between init position and goal'
     )
-    parser.add_argument('--seed', default=2, nargs='?', help='random seed')
+    parser.add_argument('--seed', default=100, nargs='?', help='random seed')
     args = parser.parse_args()
 
     # cfg

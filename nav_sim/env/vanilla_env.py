@@ -164,8 +164,8 @@ class VanillaEnv():
             )
 
             # Get Image
-            far = 1000.0
-            near = 0.01
+            far = 5 #1000.0
+            near = 1 #0.01
             projection_matrix = self._p.computeProjectionMatrixFOV(
                 fov=rgb_cfg.fov, aspect=rgb_cfg.aspect, nearVal=near,
                 farVal=far
@@ -534,27 +534,30 @@ class VanillaEnv():
             theta_new -= 2 * np.pi
         elif theta_new < 0:
             theta_new += 2 * np.pi
-        x_new = (
-            x + x_dot * np.cos(theta_new) * self.dt
-            - y_dot * np.sin(theta_new) * self.dt
-        )
-        y_new = (
-            y + x_dot * np.sin(theta_new) * self.dt
-            + y_dot * np.cos(theta_new) * self.dt
-        )
         # x_new = (
-        #     x + x_dot * np.cos(theta) * self.dt
-        #     - y_dot * np.sin(theta) * self.dt
+        #     x + x_dot * np.cos(theta_new) * self.dt
+        #     - y_dot * np.sin(theta_new) * self.dt
         # )
         # y_new = (
-        #     y + x_dot * np.sin(theta) * self.dt
-        #     + y_dot * np.cos(theta) * self.dt
+        #     y + x_dot * np.sin(theta_new) * self.dt
+        #     + y_dot * np.cos(theta_new) * self.dt
         # )
-        # theta_new = theta + theta_dot * self.dt
-        # if theta_new > 2 * np.pi:
-        #     theta_new -= 2 * np.pi
-        # elif theta_new < 0:
-        #     theta_new += 2 * np.pi
+        # # x_new = (
+        # #     x + x_dot * np.cos(theta) * self.dt
+        # #     - y_dot * np.sin(theta) * self.dt
+        # # )
+        # # y_new = (
+        # #     y + x_dot * np.sin(theta) * self.dt
+        # #     + y_dot * np.cos(theta) * self.dt
+        # # )
+        # # theta_new = theta + theta_dot * self.dt
+        # # if theta_new > 2 * np.pi:
+        # #     theta_new -= 2 * np.pi
+        # # elif theta_new < 0:
+        # #     theta_new += 2 * np.pi
+        x_new = x_dot
+        y_new = y_dot
+        theta_new = 0
         state = np.array([x_new, y_new, theta_new])
 
         # Update visual

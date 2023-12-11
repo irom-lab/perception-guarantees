@@ -162,7 +162,7 @@ class MLPModel(StochasticModel):
 
     def forward(self, x):
         '''
-        input x: (batch_size, num_locations, feature_dims0, feature_dims1)
+        input x: (batch_size, num_locations, num_objects, feature_dims0, feature_dims1)
         return:  (batch_size, num_locations, num_out)
         '''
 
@@ -174,7 +174,7 @@ class MLPModel(StochasticModel):
         x = self.linear2(x)
         # x = F.relu(x)
 
-        x = x.view((x.shape[0], x.shape[1], self.num_out[0], self.num_out[1]))
+        x = x.view((x.shape[0], x.shape[1], self.num_out[0], self.num_out[1],  self.num_out[2]))
 
         return x
 
@@ -182,15 +182,15 @@ class MLPModelDet(nn.Module):
     def __init__(self, num_in, num_out):
         super(MLPModelDet, self).__init__()
 
-        self.linear1 = nn.Linear(num_in, 200)
-        self.linear2 = nn.Linear(200, np.prod(num_out))
+        self.linear1 = nn.Linear(num_in, 1000)
+        self.linear2 = nn.Linear(1000, np.prod(num_out))
         # self.linear1 = StochasticLinear(num_in, 200)
         # self.linear2 = StochasticLinear(200, np.prod(num_out))
         self.num_out = num_out
 
     def forward(self, x):
         '''
-        input x: (batch_size, num_locations, feature_dims0, feature_dims1)
+        input x: (batch_size, num_locations, num_objects, feature_dims0, feature_dims1)
         return:  (batch_size, num_locations, num_out)
         '''
 
@@ -202,6 +202,6 @@ class MLPModelDet(nn.Module):
         x = self.linear2(x)
         # x = F.relu(x)
 
-        x = x.view((x.shape[0], x.shape[1], self.num_out[0], self.num_out[1]))
+        x = x.view((x.shape[0], x.shape[1], self.num_out[0], self.num_out[1],  self.num_out[2]))
 
         return x
