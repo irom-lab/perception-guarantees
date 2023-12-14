@@ -13,18 +13,33 @@ import IPython as ipy
 from sklearn.cluster import DBSCAN
 
 def is_box_visible(X, obstacles, visualize):
+    # t_s = time.time()
     is_vis = [False]*len(obstacles)
     noise = np.array(X)
+    num_points=len(noise)
     for obs_idx, obs in enumerate(obstacles):
         # Check if any visible points are in the ground truth boxes. If more than 100 points are inside the box, it is marked visible
-        if (len(noise) > 0):
+        if (num_points > 0):
             obs = np.array(obs)
             s=[(noise[:,i]>obs[i]+0.1) & (noise[:,i]<obs[3+i]-0.1) for i in range(3)]
             s=np.array(s)
-            is_vis_noise=bool(sum(s[0,:]&s[1,:]&s[2,:])>100)
+            is_vis_noise=bool(sum(s[0,:]&s[1,:]&s[2,:])>(num_points/5))
         else: 
             is_vis_noise = False
         is_vis[obs_idx]  = is_vis_noise
+    # t_e = time.time()
+    # print("time for checking what's visible ", t_e-t_s)
+    if visualize:
+        plt.figure()
+        ax = plt.axes(projection='3d')
+        ax.scatter3D(
+            -X[:,1], X[:,0],X[:,2]
+        )
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.set_aspect('equal')
+        plt.show()
     return is_vis
 
 def cluster(X, visualize):

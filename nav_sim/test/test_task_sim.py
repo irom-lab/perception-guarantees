@@ -64,6 +64,14 @@ device = torch.device("cuda")
 # device = torch.device("cpu")
 model.to(device)
 
+# Load the x,y points to sample
+with open('data/Pset_1k_cost5.pkl', 'rb') as f:
+    samples = pickle.load(f)
+x = [sample[1] for sample in samples]
+y = [sample[0]-4 for sample in samples]
+
+num_steps = len(x)
+
 # Load params from json file
 with open("env_params.json", "r") as read_file:
     params = json.load(read_file)
@@ -85,9 +93,9 @@ def run_env(task):
     # Change seed if you want
     # np.random.default_rng(12345)
 
-    num_steps = 1000 # 500 #1000
-    x = np.random.uniform(0.05,7.95,num_steps)
-    y = np.random.uniform(-3.95,3.95,num_steps)
+    # num_steps = 1000 # 500 #1000
+    # x = np.random.uniform(0.05,7.95,num_steps)
+    # y = np.random.uniform(-3.95,3.95,num_steps)
 
     # Press any key to start
     # print("\n=========================================")
@@ -123,7 +131,10 @@ def run_env(task):
 
 def run_step(env, task, x, y, step, visualize=False):
     action  = [x[step],y[step],0]
+    # t_s = time.time()
     observation, reward, done, info = env.step(action)
+    # t_e_1 = time.time()
+    # print("Time to take step and get observation: ", t_e_1 - t_s)
 
     task.observation.camera_pos[step] = [float(env.lidar_pos[0]), float(env.lidar_pos[1]), float(env.lidar_pos[2])]
     pos = task.observation.camera_pos[step]
@@ -148,7 +159,7 @@ def run_step(env, task, x, y, step, visualize=False):
     X = np.transpose(np.array(X))
     if(len(X) > 0):
         # print(len(X))
-        X = random_sampling(X, 5000)
+        # X = random_sampling(X, 5000)
     #     cluster_centers = cluster(X, visualize)
     #     for obs_idx, obs in enumerate(task.piece_bounds_all):
     #         # even "just outside" the box is acceptable as a cluster center, we'd rather be more conservative (-+)
@@ -169,8 +180,13 @@ def run_step(env, task, x, y, step, visualize=False):
         pc = np.array(points).astype('float32')
         pc = pc.reshape((1, num_pc_points, 3))
         pc_all = torch.from_numpy(pc).to(device)
+        # t_s = time.time()
         output, box_features = get_box(pc_all)
+        # t_e_1 = time.time()
         bb = match_output_gt_boxes(output, np.array(gt_obs), is_vis)
+        # t_e_2 = time.time()
+        # print("Time to generate boxes ", t_e_1 - t_s)
+        # print("Time to match boxes to ground truth ", t_e_2 - t_e_1)
         bbnp = np.array(bb)
         gtnp = np.array(gt_obs)
         visnp = np.array(is_vis)
@@ -382,11 +398,11 @@ if __name__ == '__main__':
         task.observation.camera_pos = {}
         task.observation.cam_not_inside_obs = {}
         task.observation.is_visible = {}
-        task.observation.rgb.x_offset_from_robot_front = 0.01  # no y offset
-        task.observation.rgb.z_offset_from_robot_top = 0
+        task.observation.rgb.x_offset_from_robot_front = 0.05  # no y offset
+        task.observation.rgb.z_offset_from_robot_top = 0.05
         task.observation.rgb.tilt = 0  # degrees of tilting down towards the floor
-        task.observation.rgb.img_w = 1280
-        task.observation.rgb.img_h = 720
+        task.observation.rgb.img_w = 662
+        task.observation.rgb.img_h = 376
         task.observation.rgb.aspect = 1.57
         task.observation.rgb.fov = 70  # in PyBullet, this is vertical field of view in degrees
         task.observation.depth.img_w = task.observation.rgb.img_w  # needs to be the same now - assume coming from the same camera
@@ -407,7 +423,7 @@ if __name__ == '__main__':
     num_envs = 100
 
     # Number of parallel threads
-    num_parallel = 10
+    num_parallel = 5
     ##################################################################
 
     # _, _, _ = render_env(seed=0)

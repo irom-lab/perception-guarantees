@@ -43,7 +43,7 @@ class VanillaEnv():
         self.front_wall_rgba = [199 / 255, 182 / 255, 191 / 255, 1.0]
 
         # Robot dimensions TODO: get Go1 dimensions
-        self.robot_half_dim = [0.40, 0.25, 0.30]
+        self.robot_half_dim = [0.323, 0.14, 0.2]
         self.robot_com_height = self.robot_half_dim[2]
         self.lidar_height = 0.15
         self.camera_thickness = 0.04
