@@ -74,3 +74,9 @@ This code will generate .ply files in the `viz_pcs` folder. You can visualize th
 - Bounding boxes that gibson provides are slightly larger than they need to be (not entirely sure why).
 
 
+## Running planner on robot
+- instaill shapely with `pip install shapely`
+- run `robot_plan.py`
+- see readme inside planning folder for more details
+- `Safe_planner.py` in planning folder contains the palnner code. Parameters in the `init` function can be modified.
+- `params.py` in the planning folder has the dynamics matrices. Need to update once have sys ID done.

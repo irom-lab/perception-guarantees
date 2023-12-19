@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.spatial.distance import cdist
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
@@ -44,11 +45,12 @@ class World:
         self.h = world_box[1,1] - world_box[0,1]
         # self.occ_space = np.array([])
         self.counter = 0
+        self.free_space = None
 
     def update(self, new_boxes):
         '''Applies nondeterministic filter to update estimate of occupancy space'''
         new_occ_space = np.array(new_boxes)
-        world = Polygon([[0,0],[0,self.h],[self.w,self.h],[self.w,0],[0,0]])
+        # world = Polygon([[0,0],[0,self.h],[self.w,self.h],[self.w,0],[0,0]])
         if self.counter == 0:
             self.occ_space = unary_union(turn_box(new_occ_space))
         else:
@@ -59,13 +61,17 @@ class World:
         
         self.occ_space.simplify(1e-5)
         self.occ_space = MultiPolygon([orient(s, sign=-1.0) for s in self.occ_space.geoms])
-        self.free_space = world.difference(self.occ_space)
+        # self.free_space = world.difference(self.occ_space)
         self.counter += 1
 
     def isValid(self, state):
         '''Collision check'''
-        
-        return self.free_space.buffer(1e-5).contains(Point(state[0],state[1]))
+        if self.free_space is None:
+            # inside = self.occ_space.contains(Point(state[0],state[1]))
+            # return not inside
+            return True
+        else:
+            return self.free_space.buffer(1e-5).contains(Point(state[0],state[1]))
     
     def isValid_multiple(self, states):
         '''Check collision for multiple points'''
@@ -93,7 +99,11 @@ class World:
             self.occ_space = MultiPolygon([self.occ_space])
         for geom in self.occ_space.geoms:    
             xs, ys = geom.exterior.xy    
+            ax.fill(xs,ys, edgecolor = 'k',fc='r')
+        if self.free_space is not None:
+            xs, ys = self.free_space.exterior.xy  
             ax.fill(xs,ys, edgecolor = 'k',fc=(0, 0.4470, 0.7410,0.5))
+        
         return fig, ax
     
     def show_occlusion(self,polygons):
@@ -106,15 +116,17 @@ class World:
 
 class Safe_Planner:
     def __init__(self,
-                 world_box: np.ndarray = np.array([[0,0],[8,8]]),
-                 vx_range: list = [-2,2],
-                 vy_range: list = [0,2],
-                 goal: list = [6,7,0,0],
+                 world_box: np.ndarray = np.array([[0,0],[8,18]]),
+                 vx_range: list = [-0.5,0.5],
+                 vy_range: list = [0,1],
+                 sr: float = 1.0, # initial clearance
+                 init_state: list = [4,0.5,0,0],
+                 goal: list = [7.5,7.5,0,0],
                  dt: float = 0.1, #time resolution for controls
                  sensor_dt: float = 1, #time resolution for perception update
-                 r = 5, #cost threshold for reachability
+                 r = 5.5, #cost threshold for reachability
                  radius = 0.5, #radius for finding intermediate goals
-                 FoV = np.pi*2/3, #field of view
+                 FoV = 70*np.pi/180, #field of view
                  n_samples = 1000,
                  max_search_iter = 1000,
                  neighbor_radius = 0.5, #for non-dynamics planning
@@ -123,8 +135,14 @@ class Safe_Planner:
         self.world_box = world_box
         self.vx_range = vx_range
         self.vy_range = vy_range
+        self.init_state = init_state
         self.goal = goal
         self.world = World(world_box)
+        
+        self.world.free_space = Polygon(((init_state[0]-sr, init_state[1]-sr),
+                                         (init_state[0]-sr, init_state[1]+sr),
+                                         (init_state[0]+sr, init_state[1]+sr),
+                                         (init_state[0]+sr, init_state[1]-sr)))
         self.dt = dt
         self.sensor_dt = sensor_dt
         self.r = r
@@ -208,7 +226,7 @@ class Safe_Planner:
         subgoal_idxs = []
         
         for subgoal in candidates:
-            subgoal_idx = np.argmin(np.linalg.norm(np.array(self.Pset)[:,0:2] - subgoal, axis=1))
+            subgoal_idx = np.argmin(cdist(np.array(self.Pset)[:,0:2],np.array([subgoal])))
             subgoal_idxs.append(subgoal_idx)
             if any([all(i == self.Pset[subgoal_idx][0:2]) for i in self.goal_explored]):
                 # this subgoal is already explored
@@ -247,7 +265,7 @@ class Safe_Planner:
             ray_objects.append(ray_object)
         
         vs = find_polygon(ray_objects, world)
-        return Polygon(vs)        
+        return Polygon(vs)
 
     # plots
     def plot_reachable(self, direction):
@@ -336,13 +354,20 @@ class Safe_Planner:
         
         # apply filter to update the world
         self.world.update(new_boxes)
+        # self.world.show()
 
         # finds nearest sampled node to current state
-        start_idx = np.argmin(np.linalg.norm(np.array(self.Pset) - np.array(state),axis=1))
+        start_idx = np.argmin(cdist(np.array(self.Pset),np.array(state)))
         self.goal_idx = self.n_samples
         
+        # start in box?
+        if not self.world.isValid(self.Pset[start_idx]):
+            print('start in box')
+            return [], None, None
+
         # occlusion
-        self.world.free_space = self.occlusion(start_idx)
+        new_free_space = self.occlusion(start_idx)
+        self.world.free_space = self.world.free_space.union(new_free_space)
 
         # initialize planner
         self.cost = np.zeros(self.n_samples+1)

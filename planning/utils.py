@@ -409,9 +409,9 @@ def trace_polygon(ray1_, ray2_, same_box, world):
                 break
     elif len(ray2_y_inter) != 0 and len(ray2_x_inter) != 0:
         box_end_idx = list(set(ray2_x_inter).intersection(ray2_y_inter))[0]
-    
+
     if box_start_idx > box_end_idx and same_box==world:
-        return np.array(same_box.coords.xy)[:,box_end_idx:box_start_idx].T
+        return np.array(same_box.coords.xy).T[box_start_idx-1:box_end_idx-1:-1]
     elif box_start_idx > box_end_idx:
         return np.hstack((
             np.array(same_box.coords.xy)[:,box_start_idx:len(same_box.coords.xy[0])],
