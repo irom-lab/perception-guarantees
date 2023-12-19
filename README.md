@@ -75,8 +75,9 @@ This code will generate .ply files in the `viz_pcs` folder. You can visualize th
 
 
 ## Running planner on robot
-- instaill shapely with `pip install shapely`
+- install shapely with `pip install shapely`
 - run `robot_plan.py`
-- see readme inside planning folder for more details
+- see readme inside planning folder for more details on planner
 - `Safe_planner.py` in planning folder contains the palnner code. Parameters in the `init` function can be modified.
-- `params.py` in the planning folder has the dynamics matrices. Need to update once have sys ID done.
+- `params.py` in the planning folder has the dynamics matrices. Need to update and run once have sys ID done.
+- run first few cells of `plan_ex.ipynb` to recompute and save samples. In `robot_plan.py` change filename to load different pre-computed samples.

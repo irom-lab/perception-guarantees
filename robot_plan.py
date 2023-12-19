@@ -69,7 +69,8 @@ def plan_loop():
     cp = 0.59
     while True:
         # perception + cp
-        boxes = get_boxes(sp)
+        # boxes = get_boxes(sp)
+        boxes = np.array([[[0,0],[0.01,0.01]]])
         boxes[:,0,:] -= cp
         boxes[:,1,:] += cp
         
@@ -80,12 +81,14 @@ def plan_loop():
         # print(start_idx,Pset[start_idx],state)
         res = sp.plan(state, boxes)
 
-        fig, ax = sp.world.show()
-        plt.show()
+        #fig, ax = sp.world.show()
+        # plt.show()
 
         # execute
         if len(res[0]) > 1:
             print(res[0])
+            fig, ax = sp.show_connection(res[0])
+            plt.show()
             policy_before_trans = np.vstack(res[2])
             policy = (np.array([[0,1],[-1,0]])@policy_before_trans.T).T
             for step in range(int(sp.sensor_dt/sp.dt)):
