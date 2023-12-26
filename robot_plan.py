@@ -59,7 +59,8 @@ def plan_loop():
     Pset = pickle.load(f)
 
     # initialize planner
-    sp = Safe_Planner()
+    sp = Safe_Planner(goal_f=[7.0, -2.0, 0.0, 0.0])
+    print(sp.goal)
     sp.load_reachable(Pset, reachable)
 
     go1 = Go1_move(state_to_go1(sp.init_state,sp), sp)

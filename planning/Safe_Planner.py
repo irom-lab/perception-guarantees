@@ -121,7 +121,7 @@ class Safe_Planner:
                  vy_range: list = [0,1],
                  sr: float = 1.0, # initial clearance
                  init_state: list = [4,0.5,0,0],
-                 goal: list = [7.5,7.5,0,0],
+                 goal_f: list = [7.5,7.5,0,0], # forrestal coordinates
                  dt: float = 0.1, #time resolution for controls
                  sensor_dt: float = 1, #time resolution for perception update
                  r = 5.5, #cost threshold for reachability
@@ -136,8 +136,9 @@ class Safe_Planner:
         self.vx_range = vx_range
         self.vy_range = vy_range
         self.init_state = init_state
-        self.goal = goal
         self.world = World(world_box)
+        self.goal_f = goal_f
+        self.goal = self.state_to_planner(self.goal_f)
         
         self.world.free_space = Polygon(((init_state[0]-sr, init_state[1]-sr),
                                          (init_state[0]-sr, init_state[1]+sr),
@@ -164,6 +165,10 @@ class Safe_Planner:
         self.bool_open = np.zeros(n_samples+1, dtype=bool)
         self.bool_valid = np.ones(n_samples+1, dtype=bool)
         self.itr = 0
+
+    def state_to_planner(self, state):
+        # convert robot state to planner coordinates
+        return (np.array([[[0,-1,0,0],[1,0,0,0],[0,0,0,-1],[0,0,1,0]]])@np.array(state) + np.array([self.world.w/2,0,0,0]))[0]
 
     # preparation
     def find_all_reachable(self):
