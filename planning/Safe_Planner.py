@@ -7,7 +7,7 @@ from matplotlib.patches import Rectangle
 import time as tm
 import pickle
 
-from shapely.geometry import Point, MultiPolygon, Polygon, LineString
+from shapely.geometry import Point, MultiPolygon, Polygon, LineString, MultiPoint
 from shapely.ops import unary_union
 from shapely.geometry.polygon import orient
 
@@ -66,19 +66,16 @@ class World:
 
     def isValid(self, state):
         '''Collision check'''
-        if self.free_space is None:
-            # inside = self.occ_space.contains(Point(state[0],state[1]))
-            # return not inside
-            return True
-        else:
-            return self.free_space.buffer(1e-5).contains(Point(state[0],state[1]))
+        return self.free_space.buffer(1e-5).contains(Point(state[0],state[1]))
     
     def isValid_multiple(self, states):
         '''Check collision for multiple points'''
-        for x in states:
-            if not self.isValid(x):
-                return False
-        return True
+
+        return self.free_space.buffer(1e-5).contains(MultiPoint(states[:,0:2]))
+        # for x in states:
+        #     if not self.isValid(x):
+        #         return False
+        # return True
     
     def isICSfree(self, state):
         '''Check for inevitable collision set'''
@@ -124,7 +121,7 @@ class Safe_Planner:
                  goal_f: list = [7.5,7.5,0,0], # forrestal coordinates
                  dt: float = 0.1, #time resolution for controls
                  sensor_dt: float = 1, #time resolution for perception update
-                 r = 5.5, #cost threshold for reachability
+                 r = 4, #cost threshold for reachability
                  radius = 0.5, #radius for finding intermediate goals
                  FoV = 70*np.pi/180, #field of view
                  n_samples = 1000,
@@ -205,7 +202,6 @@ class Safe_Planner:
         '''Load pre-computed reachable sets'''
         self.Pset = Pset
         self.reachable = reachable
-        # for debugging
 
     def filter_neighbors(self, state, states):
         '''Reachability for non-dynamics planning'''
@@ -351,7 +347,10 @@ class Safe_Planner:
 
         plt.show()
 
-
+    def check_collision(self,node_idx):
+            state = self.Pset[node_idx]
+            self.bool_valid[node_idx] = self.world.free_space.buffer(1e-5).contains(Point(state[0],state[1]))
+    
     # safety planning algorithm
     def plan(self, state, new_boxes): 
         #plan at new sensor time step when we get new boxes
@@ -359,12 +358,11 @@ class Safe_Planner:
         
         # apply filter to update the world
         self.world.update(new_boxes)
-        # self.world.show()
 
         # finds nearest sampled node to current state
         start_idx = np.argmin(cdist(np.array(self.Pset),np.array(state)))
         self.goal_idx = self.n_samples
-        
+
         # start in box?
         if not self.world.isValid(self.Pset[start_idx]):
             print('start in box')
@@ -383,15 +381,16 @@ class Safe_Planner:
         self.bool_open[start_idx] = True
         self.bool_closed = np.zeros(self.n_samples+1, dtype=bool)
         self.bool_open = np.zeros(self.n_samples+1, dtype=bool)
-        self.bool_valid = np.ones(self.n_samples+1, dtype=bool)
+        self.bool_valid = np.zeros(self.n_samples+1, dtype=bool)
         self.itr = 0
 
         # check collision
-        for node_idx in range(self.n_samples):
-            node = self.Pset[node_idx]
-            if not self.world.isValid(node):
-                self.bool_valid[node_idx] = False
-        end2 = tm.time()
+
+        point_objects = MultiPoint(np.array(self.Pset)[:,0:2])
+        self.bool_valid = self.world.free_space.buffer(1e-5).contains(point_objects.geoms)
+
+        # for node_idx in range(self.n_samples):
+        #     self.bool_valid[node_idx] = self.world.isValid(self.Pset[node_idx])
         
         # solve
         idx_solution, goal_flag, _ = self.solve(start_idx)
@@ -420,7 +419,8 @@ class Safe_Planner:
             # break
         if goal_flag == 1:
             print('goal reached')
-        
+
+
         # output controls
         x_waypoints = []
         u_waypoints = []
@@ -442,7 +442,6 @@ class Safe_Planner:
         self.bool_open[start_idx] = True
         goal_flag = 0
         while self.itr <= self.max_search_iter:
-            # print(self.itr)
             self = self.extend(dynamics, ICS)
             if not self.bool_unvisit[self.goal_idx]: # goal node is visited
                 goal_flag = 1
@@ -465,52 +464,58 @@ class Safe_Planner:
     def extend(self, dynamics, ICS):
         '''Inner loop of FMT*'''
         self.itr += 1
-        
+
         # check nodes are collision-free
         idxset_open = np.where(self.bool_open & self.bool_valid)[0] # H
         idxset_unvisit = np.where(self.bool_unvisit & self.bool_valid)[0] # W
         if idxset_open.size != 0:
             idx_lowest = idxset_open[np.argmin(self.cost[idxset_open])] # z <- argmin cost(y)
-            # print('current node: ', idx_lowest)
+
             if dynamics:
                 R_plus = self.reachable[idx_lowest][1][0]
                 idxset_near = list(set(R_plus) & set(idxset_unvisit)) # X_near <- R+(z) \cap W
-                # print('forward-reachable nodes: ', len(idxset_near))
+
             else:
                 idxset_near, _ = self.filter_neighbors(self.Pset[idx_lowest], idxset_unvisit)
             # for x in X_near
-            # print(idxset_near)
+
+            # def process_idx(idx_near):
             for idx_near in idxset_near:
-                # Y_near <- R-(x) \cap H
+                    # Y_near <- R-(x) \cap H
+                now = tm.time()
                 if dynamics:
                     R_minus = self.reachable[idx_near][2]
                     idxset_cand = list(set(R_minus[0]) & set(idxset_open)) #index in Pset
-                    # print('backward-reachable nodes: ', len(idxset_cand))
-                    idxset_inR = [R_minus[0].index(i) for i in idxset_cand] #index in R-
-                    distset_cand = [R_minus[1][i] for i in idxset_inR]
-                    timeset_cand = [R_minus[2][i] for i in idxset_inR]
-                    # Ginv_candidate = [R_minus[3][i] for i in idxset_inR]
+                    # idxset_inR = [R_minus[0].index(i) for i in idxset_cand] #index in R-
+                    idxset_inR = np.where(np.isin(R_minus[0], idxset_cand))[0]
+                    distset_cand = np.array(R_minus[1])[idxset_inR]
+                    timeset_cand = np.array(R_minus[2])[idxset_inR]
                 else:
                     idxset_cand, distset_cand = self.filter_neighbors(self.Pset[idx_near], idxset_open)
                     timeset_cand = [0]*len(idxset_cand)
                 
+                now1 = tm.time()
+                print('time to find candidates: ', now1-now)
+                
                 if len(idxset_cand) == 0:
                     continue
                 # ymin <- argmin cost(y) + dist(y,x)
-                else:
-                    idx_incand_costmin = np.argmin(self.cost[idxset_cand] + distset_cand) #index in cand set
-                    cost_new = min(self.cost[idxset_cand] + distset_cand)
-                    time_new = timeset_cand[idx_incand_costmin]
-                    # Ginv = Ginv_candidate[idx_incand_costmin]
-                    idx_parent = idxset_cand[idx_incand_costmin]
                 
-                    if dynamics:
-                        # x_waypoints, _ = gen_trajectory(self.Pset[idx_parent],self.Pset[idx_near], time_new, self.dt)
-                        idx_nearinparentfset = self.reachable[idx_parent][1][0].index(idx_near)
-                        x_waypoints = self.reachable[idx_parent][1][3][idx_nearinparentfset][0]
-                    else:
-                        x_waypoints = gen_path(self.Pset[idx_parent],self.Pset[idx_near],self.dt*max(self.vx_range))
+                idx_incand_costmin = np.argmin(self.cost[idxset_cand] + distset_cand) #index in cand set
+                cost_new = min(self.cost[idxset_cand] + distset_cand)
+                time_new = timeset_cand[idx_incand_costmin]
+                idx_parent = idxset_cand[idx_incand_costmin]
+            
+                if dynamics:
+                    # x_waypoints, _ = gen_trajectory(self.Pset[idx_parent],self.Pset[idx_near], time_new, self.dt)
+                    idx_nearinparentfset = self.reachable[idx_parent][1][0].index(idx_near)
+                    x_waypoints = self.reachable[idx_parent][1][3][idx_nearinparentfset][0]
+                else:
+                    x_waypoints = gen_path(self.Pset[idx_parent],self.Pset[idx_near],self.dt*max(self.vx_range))
 
+                now2 = tm.time()
+                print('time to generate trajectory: ', now2-now1)
+                
                 def connect():
                     self.bool_unvisit[idx_near] = False
                     self.bool_open[idx_near] = True
@@ -518,20 +523,21 @@ class Safe_Planner:
                     self.time[idx_near] = time_new
                     self.parent[idx_near] = idx_parent
                     self.time_to_come[idx_near] = self.time_to_come[idx_parent] + time_new
-                    # print('connect')
                 
                 # check trajectory is collision-free
                 if self.world.isValid_multiple(x_waypoints):
                     # check ICS before sensor update
-                    if ICS and self.time_to_come[idx_parent] + time_new <= self.sensor_dt and self.world.isICSfree(self.Pset[idx_near]):
+                    if (ICS and self.time_to_come[idx_parent] + time_new <= self.sensor_dt 
+                        and self.world.isICSfree(self.Pset[idx_near])):
                         connect()
-                    else:
+                    elif self.time_to_come[idx_parent] + time_new > self.sensor_dt:
                         connect()
-                # else:
-                    # print('collision')
+                now3 = tm.time()
+                print('time to connect: ', now3-now2)
+            # with concurrent.futures.ProcessPoolExecutor() as executor:
+            #     executor.map(process_idx, idxset_near)
+
             self.bool_open[idx_lowest] = False
-            self.bool_closed[idx_lowest] = True
-        # else:
-            # print('no more nodes to explore')
-        # print(len(np.where(self.bool_open)[0]))
+            self.bool_closed[idx_lowest] = True            
+        
         return self
