@@ -1,11 +1,33 @@
 from planning.Safe_Planner import *
+# TODO: import robot utils from pg_ws
+import rospy
+from geometry_msgs.msg import TransformStamped
+from scipy.spatial.transform import Rotation
+import numpy as np
+import sys
+sys.path.append("~/Documents/Projects/pg_ws/src/")
+import zed_listeners
+# having issue
+# from go1_utils.zed_listeners import *
 
 class Go1_move():
     # seudocode for go1
-    def __init__(self, state, sp):
-        self.state = state
+    def __init__(self, sp, debug=False):
         self.sp = sp
         self.done = False
+        if debug:
+            self.state = get_true_state()
+        else:
+            self.state = get_state()
+
+    def get_state(self):
+        # TODO: need x, y, vx vy : update zed odom call to include velocities
+        pass
+
+    def get_true_state(self):
+        # TODO: state from vicon (for debug purposes only)
+        pass
+
     def move(self, action):
         # replace with actual moving and 
         # getting actual state
@@ -63,7 +85,7 @@ def plan_loop():
     print(sp.goal)
     sp.load_reachable(Pset, reachable)
 
-    go1 = Go1_move(state_to_go1(sp.init_state,sp), sp)
+    go1 = Go1_move(sp, debug=False)
     print(go1.state)
 
     t = 0
