@@ -22,6 +22,9 @@ class Go1_move():
             # wait for initial state
             while(self.state == None):
                 self.state, self.timestamp = self.get_state()
+            
+            # placeholder
+            self.state = [0.0, 0.0, 0.0, 0.0]
     
     def get_state(self):
         # TODO: calculate linear velocities
@@ -98,46 +101,46 @@ def plan_loop():
     time.sleep(2)
     print(go1.get_state())
 
-    # t = 0
-    # cp = 0.59
-    # while True:
-    #     # perception + cp
-    #     # boxes = get_boxes(sp)
-    #     boxes = np.array([[[0,0],[0.01,0.01]]])
-    #     boxes[:,0,:] -= cp
-    #     boxes[:,1,:] += cp
+    t = 0
+    cp = 0.59
+    while True:
+        # perception + cp
+        # boxes = get_boxes(sp)
+        boxes = np.array([[[0,0],[0.01,0.01]]])
+        boxes[:,0,:] -= cp
+        boxes[:,1,:] += cp
         
-    #     # plan
-    #     state = state_to_planner(go1.state, sp)
-    #     start_idx = np.argmin(cdist(np.array(sp.Pset),state))
+        # plan
+        state = state_to_planner(go1.state, sp)
+        start_idx = np.argmin(cdist(np.array(sp.Pset),state))
 
-    #     # print(start_idx,Pset[start_idx],state)
-    #     res = sp.plan(state, boxes)
+        # print(start_idx,Pset[start_idx],state)
+        res = sp.plan(state, boxes)
 
-    #     #fig, ax = sp.world.show()
-    #     # plt.show()
+        #fig, ax = sp.world.show()
+        # plt.show()
 
-    #     # execute
-    #     if len(res[0]) > 1:
-    #         print(res[0])
-    #         fig, ax = sp.show_connection(res[0])
-    #         plt.show()
-    #         policy_before_trans = np.vstack(res[2])
-    #         policy = (np.array([[0,1],[-1,0]])@policy_before_trans.T).T
-    #         for step in range(int(sp.sensor_dt/sp.dt)):
-    #             action = policy[step]
-    #             go1.move(action)
-    #             t += sp.sensor_dt
-    #             print(go1.state)
-    #         if go1.done:
-    #             break
-    #     else:
-    #         for step in range(int(sp.sensor_dt/sp.dt)):
-    #             action = [0,0]
-    #             go1.move(action)
-    #             t += sp.sensor_dt
-    #     if t >100:
-    #         break
+        # execute
+        if len(res[0]) > 1:
+            print(res[0])
+            fig, ax = sp.show_connection(res[0])
+            plt.show()
+            policy_before_trans = np.vstack(res[2])
+            policy = (np.array([[0,1],[-1,0]])@policy_before_trans.T).T
+            for step in range(int(sp.sensor_dt/sp.dt)):
+                action = policy[step]
+                go1.move(action)
+                t += sp.sensor_dt
+                print(go1.state)
+            if go1.done:
+                break
+        else:
+            for step in range(int(sp.sensor_dt/sp.dt)):
+                action = [0,0]
+                go1.move(action)
+                t += sp.sensor_dt
+        if t >100:
+            break
 
     if debug:    
         rospy.spin()
