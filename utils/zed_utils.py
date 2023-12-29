@@ -64,7 +64,7 @@ class Zed:
                 translation = self.camera_pose.get_translation(self.py_translation)
                 t_translation = [round(translation.get()[0], 2), round(translation.get()[1], 2), round(translation.get()[2], 2)]
                 pose_data = self.camera_pose.pose_data(sl.Transform())
-                print(t_translation, self.camera_pose.timestamp.get_microseconds())
+                # print(t_translation, self.camera_pose.timestamp.get_microseconds())
         
         return t_translation, self.camera_pose.timestamp.get_microseconds()
     

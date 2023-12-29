@@ -13,28 +13,52 @@ class Go1_move():
     def __init__(self, sp, debug=False):
         self.sp = sp
         self.done = False
+        self.state = [0.0, 0.0, 0.0, 0.0]
+        self.timestamp = 0
         if debug:
-            self.state = get_true_state()
+            self.vicon_state = ViconStateListener("vicon/cobs_alec/cobs_alec", "y") # TODO: change to Strelka
+            # wait for initial state read
+            if (self.vicon_state.timestamp == 0.0):
+                time.sleep(0.5)
+            self.state, self.timestamp = self.get_true_state()
         else:
             # initialize Zed 
             self.camera = Zed()
-            self.state = None
             # wait for initial state
-            while(self.state == None):
-                self.state, self.timestamp = self.get_state()
-            
-            # placeholder
-            self.state = [0.0, 0.0, 0.0, 0.0]
+            if (self.camera.get_pose()[0] == None):
+                time.sleep(0.5)
+            self.state, self.timestamp = self.get_state()
     
     def get_state(self):
-        # TODO: calculate linear velocities
-        self.camera.get_IMU()
-        state, timestamp = self.camera.get_pose()
+        # TODO: analyze on moving robot closely to double check coordinate system
+        # self.camera.get_IMU()
+        pos_state, timestamp = self.camera.get_pose()
+        vx, vy = self.calc_velocity(self.state[0], self.state[2], self.timestamp, pos_state[0], pos_state[1], timestamp)
+        state = [pos_state[0], vx, pos_state[1], vy]
+
+        # update state and timestamp
+        self.state = state
+        self.timestamp = timestamp
         return state, timestamp
 
     def get_true_state(self):
-        # TODO: state from vicon (for debug purposes only)
-        pass
+        x, y, timestamp = self.vicon_state.x, self.vicon_state.y, self.vicon_state.timestamp
+        vx, vy = self.calc_velocity(self.state[0], self.state[2], self.timestamp, x, y, timestamp, units='seconds')
+        state = [x, vx, y, vy]
+        # update state and timestamp
+        self.state = state
+        self.timestamp = timestamp
+        return state, timestamp
+    
+    def calc_velocity(self, x1, y1, t1, x2, y2, t2, units='microseconds'):
+        if units == 'microseconds':
+            delta_t_microseconds = t2 - t1
+            delta_t = delta_t_microseconds / 1e6  # convert to seconds
+        else:
+            delta_t = t2 - t1
+        vx = (x2 - x1) / delta_t
+        vy = (y2 - y1) / delta_t
+        return vx, vy
 
     def move(self, action):
         # replace with actual moving and 
@@ -96,51 +120,52 @@ def plan_loop():
     print(sp.goal)
     sp.load_reachable(Pset, reachable)
 
-    go1 = Go1_move(sp, debug=False)
+    go1 = Go1_move(sp, debug=debug)
     print(go1.state)
     time.sleep(2)
-    print(go1.get_state())
+    for t in range(100):
+        print(go1.get_state())
 
-    t = 0
-    cp = 0.59
-    while True:
-        # perception + cp
-        # boxes = get_boxes(sp)
-        boxes = np.array([[[0,0],[0.01,0.01]]])
-        boxes[:,0,:] -= cp
-        boxes[:,1,:] += cp
+    # t = 0
+    # cp = 0.59
+    # while True:
+    #     # perception + cp
+    #     # boxes = get_boxes(sp)
+    #     boxes = np.array([[[0,0],[0.01,0.01]]])
+    #     boxes[:,0,:] -= cp
+    #     boxes[:,1,:] += cp
         
-        # plan
-        state = state_to_planner(go1.state, sp)
-        start_idx = np.argmin(cdist(np.array(sp.Pset),state))
+    #     # plan
+    #     state = state_to_planner(go1.state, sp)
+    #     start_idx = np.argmin(cdist(np.array(sp.Pset),state))
 
-        # print(start_idx,Pset[start_idx],state)
-        res = sp.plan(state, boxes)
+    #     # print(start_idx,Pset[start_idx],state)
+    #     res = sp.plan(state, boxes)
 
-        #fig, ax = sp.world.show()
-        # plt.show()
+    #     #fig, ax = sp.world.show()
+    #     # plt.show()
 
-        # execute
-        if len(res[0]) > 1:
-            print(res[0])
-            fig, ax = sp.show_connection(res[0])
-            plt.show()
-            policy_before_trans = np.vstack(res[2])
-            policy = (np.array([[0,1],[-1,0]])@policy_before_trans.T).T
-            for step in range(int(sp.sensor_dt/sp.dt)):
-                action = policy[step]
-                go1.move(action)
-                t += sp.sensor_dt
-                print(go1.state)
-            if go1.done:
-                break
-        else:
-            for step in range(int(sp.sensor_dt/sp.dt)):
-                action = [0,0]
-                go1.move(action)
-                t += sp.sensor_dt
-        if t >100:
-            break
+    #     # execute
+    #     if len(res[0]) > 1:
+    #         print(res[0])
+    #         fig, ax = sp.show_connection(res[0])
+    #         plt.show()
+    #         policy_before_trans = np.vstack(res[2])
+    #         policy = (np.array([[0,1],[-1,0]])@policy_before_trans.T).T
+    #         for step in range(int(sp.sensor_dt/sp.dt)):
+    #             action = policy[step]
+    #             go1.move(action)
+    #             t += sp.sensor_dt
+    #             print(go1.state)
+    #         if go1.done:
+    #             break
+    #     else:
+    #         for step in range(int(sp.sensor_dt/sp.dt)):
+    #             action = [0,0]
+    #             go1.move(action)
+    #             t += sp.sensor_dt
+    #     if t >100:
+    #         break
 
     if debug:    
         rospy.spin()

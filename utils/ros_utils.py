@@ -43,6 +43,7 @@ class ViconStateListener:
     def __init__(self, sub_state, forward):
         self.x = 0.0
         self.y = 0.0
+        self.timestamp = 0.0
         self.forward = forward
         self.sub = rospy.Subscriber(sub_state, TransformStamped, self.callback)
 
@@ -51,7 +52,9 @@ class ViconStateListener:
             # if go1 forward is x
             self.x = -data.transform.translation.y
             self.y = data.transform.translation.x
+            self.timestamp = rospy.Time(data.header.stamp.secs, data.header.stamp.nsecs).to_sec()
         elif self.forward == 'y':
             # if go1 forward is y
             self.x = -data.transform.translation.x
             self.y = -data.transform.translation.y
+            self.timestamp = rospy.Time(data.header.stamp.secs, data.header.stamp.nsecs).to_sec()
