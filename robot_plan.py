@@ -56,7 +56,12 @@ def plan_loop():
     print(go1.state)
     time.sleep(2)
     for t in range(100):
-        print(go1.get_state())
+        if debug:
+            print(go1.get_true_state())
+            time.sleep(0.2)
+        else:
+            print(go1.get_state())
+            time.sleep(0.2)
 
     # t = 0
     # cp = 0.59

@@ -1,6 +1,7 @@
 import pyzed.sl as sl
 import argparse
 from scipy.spatial.transform import Rotation
+import tf
 
 class Zed:
     def __init__(self):
@@ -41,6 +42,7 @@ class Zed:
         self.runtime = sl.RuntimeParameters()
         self.camera_pose = sl.Pose()
         self.py_translation = sl.Translation()
+        self.py_orientation = sl.Orientation()
 
     def get_IMU(self):
         ts_handler = TimestampHandler()
@@ -55,7 +57,9 @@ class Zed:
         return quaternion, acceleration
     
     def get_pose(self):
+        # TODO: add in yaw
         t_translation = 0.0
+        yaw = 0.0
         if self.zed.grab(self.runtime) == sl.ERROR_CODE.SUCCESS:
             tracking_state = self.zed.get_position(self.camera_pose,sl.REFERENCE_FRAME.WORLD) #Get the position of the camera in a fixed reference frame (the World Frame)
             if tracking_state == sl.POSITIONAL_TRACKING_STATE.OK:
@@ -66,9 +70,19 @@ class Zed:
                 pose_data = self.camera_pose.pose_data(sl.Transform())
                 # print(t_translation, self.camera_pose.timestamp.get_microseconds())
         
-        return t_translation, self.camera_pose.timestamp.get_microseconds()
+                #Orientation quaternion
+                ox = round(self.camera_pose.get_orientation(self.py_orientation).get()[0], 3)
+                oy = round(self.camera_pose.get_orientation(self.py_orientation).get()[1], 3)
+                oz = round(self.camera_pose.get_orientation(self.py_orientation).get()[2], 3)
+                ow = round(self.camera_pose.get_orientation(self.py_orientation).get()[3], 3)
+                q = [ox, oy, oz, ow]
+                euler = tf.transformations.euler_from_quaternion(q)
+                yaw =  euler[2] # TODO: CHECK
+
+        return t_translation, self.camera_pose.timestamp.get_microseconds(), yaw
     
     def get_pc(self):
+        # TODO: add zed related functions for using the pointcloud
         pass
 
     def parse_args(self, init):
