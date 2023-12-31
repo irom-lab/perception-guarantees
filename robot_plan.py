@@ -1,24 +1,10 @@
 from planning.Safe_Planner import *
+import rospy
+from geometry_msgs.msg import TransformStamped
+from scipy.spatial.transform import Rotation
+import numpy as np
+from utils.go1_move import *
 
-class Go1_move():
-    # seudocode for go1
-    def __init__(self, state, sp):
-        self.state = state
-        self.sp = sp
-        self.done = False
-    def move(self, action):
-        # replace with actual moving and 
-        # getting actual state
-        x, y, vx, vy = self.state
-        ux, uy = action
-        x_new = x + vx* self.sp.dt
-        y_new = y + vy * self.sp.dt
-        vx_new = vx-k1*self.sp.dt*vx+k1*ux*self.sp.dt
-        vy_new = vy-k2*self.sp.dt*vy+k2*uy*self.sp.dt
-        self.state = np.array([x_new, y_new, vx_new, vy_new]) 
-
-        if np.linalg.norm(self.state[0:2]-self.sp.goal[0:2]) < 0.5: # this is arbitrary now
-            self.done = True
 
 def state_to_planner(state, sp):
     # convert robot state to planner coordinates
@@ -50,7 +36,10 @@ def get_boxes(sp):
 
 
 def plan_loop():
-
+    debug = False
+    if debug:
+        rospy.init_node('listener', anonymous=True)
+    
     # planner
     # load pre-computed: need to recompute for actual gains
     f = open('planning/pre_compute/reachable_cost5_newdim.pkl', 'rb')
@@ -59,52 +48,64 @@ def plan_loop():
     Pset = pickle.load(f)
 
     # initialize planner
-    sp = Safe_Planner()
+    sp = Safe_Planner(goal_f=[7.0, -2.0, 0.0, 0.0])
+    print(sp.goal)
     sp.load_reachable(Pset, reachable)
 
-    go1 = Go1_move(state_to_go1(sp.init_state,sp), sp)
+    go1 = Go1_move(sp, debug=debug)
     print(go1.state)
-
-    t = 0
-    cp = 0.59
-    while True:
-        # perception + cp
-        # boxes = get_boxes(sp)
-        boxes = np.array([[[0,0],[0.01,0.01]]])
-        boxes[:,0,:] -= cp
-        boxes[:,1,:] += cp
-        
-        # plan
-        state = state_to_planner(go1.state, sp)
-        start_idx = np.argmin(cdist(np.array(sp.Pset),state))
-
-        # print(start_idx,Pset[start_idx],state)
-        res = sp.plan(state, boxes)
-
-        #fig, ax = sp.world.show()
-        # plt.show()
-
-        # execute
-        if len(res[0]) > 1:
-            print(res[0])
-            fig, ax = sp.show_connection(res[0])
-            plt.show()
-            policy_before_trans = np.vstack(res[2])
-            policy = (np.array([[0,1],[-1,0]])@policy_before_trans.T).T
-            for step in range(int(sp.sensor_dt/sp.dt)):
-                action = policy[step]
-                go1.move(action)
-                t += sp.sensor_dt
-                print(go1.state)
-            if go1.done:
-                break
+    time.sleep(2)
+    for t in range(100):
+        if debug:
+            print(go1.get_true_state())
+            time.sleep(0.2)
         else:
-            for step in range(int(sp.sensor_dt/sp.dt)):
-                action = [0,0]
-                go1.move(action)
-                t += sp.sensor_dt
-        if t >100:
-            break
+            print(go1.get_state())
+            time.sleep(0.2)
+
+    # t = 0
+    # cp = 0.59
+    # while True:
+    #     # perception + cp
+    #     # boxes = get_boxes(sp)
+    #     boxes = np.array([[[0,0],[0.01,0.01]]])
+    #     boxes[:,0,:] -= cp
+    #     boxes[:,1,:] += cp
+        
+    #     # plan
+    #     state = state_to_planner(go1.state, sp)
+    #     start_idx = np.argmin(cdist(np.array(sp.Pset),state))
+
+    #     # print(start_idx,Pset[start_idx],state)
+    #     res = sp.plan(state, boxes)
+
+    #     #fig, ax = sp.world.show()
+    #     # plt.show()
+
+    #     # execute
+    #     if len(res[0]) > 1:
+    #         print(res[0])
+    #         fig, ax = sp.show_connection(res[0])
+    #         plt.show()
+    #         policy_before_trans = np.vstack(res[2])
+    #         policy = (np.array([[0,1],[-1,0]])@policy_before_trans.T).T
+    #         for step in range(int(sp.sensor_dt/sp.dt)):
+    #             action = policy[step]
+    #             go1.move(action)
+    #             t += sp.sensor_dt
+    #             print(go1.state)
+    #         if go1.done:
+    #             break
+    #     else:
+    #         for step in range(int(sp.sensor_dt/sp.dt)):
+    #             action = [0,0]
+    #             go1.move(action)
+    #             t += sp.sensor_dt
+    #     if t >100:
+    #         break
+
+    if debug:    
+        rospy.spin()
 
 if __name__ == '__main__':
     plan_loop()
