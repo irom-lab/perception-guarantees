@@ -113,6 +113,7 @@ class World:
 
 class Safe_Planner:
     def __init__(self,
+                 Pset: list,
                  world_box: np.ndarray = np.array([[0,0],[8,18]]),
                  vx_range: list = [-0.5,0.5],
                  vy_range: list = [0,1],
@@ -129,6 +130,9 @@ class Safe_Planner:
                  neighbor_radius = 0.5, #for non-dynamics planning
                  seed = 0):
         # load inputs
+
+        self.Pset = Pset
+
         self.world_box = world_box
         self.vx_range = vx_range
         self.vy_range = vy_range
@@ -163,17 +167,17 @@ class Safe_Planner:
         self.itr = 0
 
     # preparation
+    
     def find_all_reachable(self):
-        '''Samples points and computes reachable sets for all points'''
-        self.Pset = []
+        '''Computes reachable sets for all pre-sampled points'''
 
         import ray
 
         # sample random nodes
-        while len(self.Pset) < self.n_samples:
-            node = self.prng.uniform((0,0,min(self.vx_range),min(self.vy_range)), #mins
-                                     (self.world.w,self.world.h,max(self.vx_range),max(self.vy_range))) #maxs
-            self.Pset.append(node)
+        # while len(self.Pset) < self.n_samples:
+        #     node = self.prng.uniform((0,0,min(self.vx_range),min(self.vy_range)), #mins
+        #                              (self.world.w,self.world.h,max(self.vx_range),max(self.vy_range))) #maxs
+        #     self.Pset.append(node)
         self.Pset.append(self.goal)
 
         # pre-compute reachable sets
@@ -192,6 +196,18 @@ class Safe_Planner:
         futures = [compute_reachable.remote(node_idx) for node_idx in range(len(self.Pset))]
         self.reachable = ray.get(futures)
         ray.shutdown()
+    
+    def find_goal_reachable(self, reachable):
+        '''Computes reachable sets for goal node'''
+        self.reachable = reachable
+        fset, fdist, ftime, ftraj = filter_reachable(self.goal,self.Pset,self.r,self.vx_range,self.vy_range, 'F', self.dt)
+        bset, bdist, btime, btraj = filter_reachable(self.goal,self.Pset,self.r,self.vx_range,self.vy_range, 'B', self.dt)
+        for idx in range(len(bset)):
+            self.reachable[bset[idx]][2][0].append(self.n_samples)
+            self.reachable[bset[idx]][2][1].append(bdist[idx])
+            self.reachable[bset[idx]][2][2].append(btime[idx])
+            self.reachable[bset[idx]][2][3].append(btraj[idx])
+        self.reachable[self.n_samples] = (self.n_samples,(fset, fdist, ftime, ftraj), (bset, bdist, btime, btraj))
 
     def load_reachable(self, Pset, reachable):
         '''Load pre-computed reachable sets'''
