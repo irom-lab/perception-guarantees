@@ -17,7 +17,7 @@ class Go1_move():
 
         # initialize states
         if debug:
-            self.vicon_state = ViconStateListener("vicon/cobs_alec/cobs_alec", "y") # TODO: change to Strelka
+            self.vicon_state = ViconStateListener("vicon/strelka/strelka", "x") 
             # wait for initial state read
             if (self.vicon_state.timestamp == 0.0):
                 time.sleep(0.6)
@@ -83,14 +83,15 @@ class Go1_move():
     def move(self, action):
         ux, uy = action
         # check ux, uy fall between -1, 1
-        ux = max(-1, min(ux, 1))
-        uy = max(-1, min(uy, 1))
-        yaw = self.correct_yaw() 
+        bound = 0.5 # TODO: change back to 1
+        ux = max(-bound, min(ux, bound))
+        uy = max(-bound, min(uy, bound))
+        # yaw = self.correct_yaw() 
 
         self.cmd.mode = 2
         self.cmd.gaitType = 1
         self.cmd.velocity = [ux, uy] # -1  ~ +1
-        self.cmd.yawSpeed = -yaw/2.0
+        self.cmd.yawSpeed = 0.0 #-yaw/2.0
         self.cmd.bodyHeight = 0.0
 
         self.udp.SetSend(self.cmd)

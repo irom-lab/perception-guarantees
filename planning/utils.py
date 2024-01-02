@@ -13,8 +13,8 @@ from shapely.geometry import box, Polygon, LineString
 from shapely.ops import unary_union
 
 
-
 import pickle
+import os
 
 [k1, k2, A, B, R, BRB] = pickle.load(open('planning/sp_var.pkl','rb'))
 

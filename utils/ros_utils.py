@@ -55,6 +55,8 @@ class ViconStateListener:
             self.y = data.transform.translation.x
             quat = [data.transform.rotation.x, data.transform.rotation.y, data.transform.rotation.z, data.transform.rotation.w]
             # TODO: add in correct transformation (not using this orientation at the moment)
+            self.yaw = self.get_yaw_from_quat(quat)
+            quat = [data.transform.rotation.x, data.transform.rotation.y, data.transform.rotation.z, data.transform.rotation.w]
             self.timestamp = rospy.Time(data.header.stamp.secs, data.header.stamp.nsecs).to_sec()
         elif self.forward == 'y':
             # if go1 forward is y

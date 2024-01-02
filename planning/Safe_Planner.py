@@ -140,6 +140,7 @@ class Safe_Planner:
         self.world = World(world_box)
         self.goal_f = goal_f
         self.goal = self.state_to_planner(self.goal_f)
+    
         
         self.world.free_space = Polygon(((init_state[0]-sr, init_state[1]-sr),
                                          (init_state[0]-sr, init_state[1]+sr),
@@ -208,10 +209,15 @@ class Safe_Planner:
         fset, fdist, ftime, ftraj = filter_reachable(self.goal,self.Pset,self.r,self.vx_range,self.vy_range, 'F', self.dt)
         bset, bdist, btime, btraj = filter_reachable(self.goal,self.Pset,self.r,self.vx_range,self.vy_range, 'B', self.dt)
         for idx in range(len(bset)):
-            self.reachable[bset[idx]][2][0].append(self.n_samples)
-            self.reachable[bset[idx]][2][1].append(bdist[idx])
-            self.reachable[bset[idx]][2][2].append(btime[idx])
-            self.reachable[bset[idx]][2][3].append(btraj[idx])
+            self.reachable[bset[idx]][1][0].append(self.n_samples)
+            self.reachable[bset[idx]][1][1].append(bdist[idx])
+            self.reachable[bset[idx]][1][2].append(btime[idx])
+            self.reachable[bset[idx]][1][3].append(btraj[idx])
+        for idx in range(len(fset)):
+            self.reachable[fset[idx]][2][0].append(self.n_samples)
+            self.reachable[fset[idx]][2][1].append(fdist[idx])
+            self.reachable[fset[idx]][2][2].append(ftime[idx])
+            self.reachable[fset[idx]][2][3].append(ftraj[idx])
         self.reachable[self.n_samples] = (self.n_samples,(fset, fdist, ftime, ftraj), (bset, bdist, btime, btraj))
 
     def load_reachable(self, Pset, reachable):
@@ -511,7 +517,7 @@ class Safe_Planner:
                     timeset_cand = [0]*len(idxset_cand)
                 
                 now1 = tm.time()
-                print('time to find candidates: ', now1-now)
+                # print('time to find candidates: ', now1-now)
                 
                 if len(idxset_cand) == 0:
                     continue
@@ -530,7 +536,7 @@ class Safe_Planner:
                     x_waypoints = gen_path(self.Pset[idx_parent],self.Pset[idx_near],self.dt*max(self.vx_range))
 
                 now2 = tm.time()
-                print('time to generate trajectory: ', now2-now1)
+                # print('time to generate trajectory: ', now2-now1)
                 
                 def connect():
                     self.bool_unvisit[idx_near] = False
@@ -549,7 +555,7 @@ class Safe_Planner:
                     elif self.time_to_come[idx_parent] + time_new > self.sensor_dt:
                         connect()
                 now3 = tm.time()
-                print('time to connect: ', now3-now2)
+                # print('time to connect: ', now3-now2)
             # with concurrent.futures.ProcessPoolExecutor() as executor:
             #     executor.map(process_idx, idxset_near)
 

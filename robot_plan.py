@@ -36,7 +36,7 @@ def get_boxes(sp):
 
 
 def plan_loop():
-    debug = False
+    debug = True
     if debug:
         rospy.init_node('listener', anonymous=True)
     
@@ -48,61 +48,79 @@ def plan_loop():
     Pset = pickle.load(f)
 
     # initialize planner
-    sp = Safe_Planner(goal_f=[7.0, -2.0, 0.0, 0.0])
+    sp = Safe_Planner(goal_f=[7.5, -3.5, 0.0, 0.0], Pset=Pset, sensor_dt=2)
     print(sp.goal)
+    print(len(reachable))
+    # sp.find_goal_reachable(reachable)
     sp.load_reachable(Pset, reachable)
 
     go1 = Go1_move(sp, debug=debug)
     print(go1.state)
     time.sleep(2)
-    for t in range(100):
-        if debug:
-            print(go1.get_true_state())
-            time.sleep(0.2)
-        else:
-            print(go1.get_state())
-            time.sleep(0.2)
-
-    # t = 0
-    # cp = 0.59
-    # while True:
-    #     # perception + cp
-    #     # boxes = get_boxes(sp)
-    #     boxes = np.array([[[0,0],[0.01,0.01]]])
-    #     boxes[:,0,:] -= cp
-    #     boxes[:,1,:] += cp
-        
-    #     # plan
-    #     state = state_to_planner(go1.state, sp)
-    #     start_idx = np.argmin(cdist(np.array(sp.Pset),state))
-
-    #     # print(start_idx,Pset[start_idx],state)
-    #     res = sp.plan(state, boxes)
-
-    #     #fig, ax = sp.world.show()
-    #     # plt.show()
-
-    #     # execute
-    #     if len(res[0]) > 1:
-    #         print(res[0])
-    #         fig, ax = sp.show_connection(res[0])
-    #         plt.show()
-    #         policy_before_trans = np.vstack(res[2])
-    #         policy = (np.array([[0,1],[-1,0]])@policy_before_trans.T).T
-    #         for step in range(int(sp.sensor_dt/sp.dt)):
-    #             action = policy[step]
-    #             go1.move(action)
-    #             t += sp.sensor_dt
-    #             print(go1.state)
-    #         if go1.done:
-    #             break
+    
+    # motion debug
+    # for t in range(100):
+    #     if debug:
+    #         print(go1.get_true_state())
+    #         time.sleep(0.2)
+    #         # if t <= 25:
+    #         #     go1.move([1.0, 0.0])
+    #         # elif t > 25 < 50:
+    #         #     go1.move([0.0, 0.4])
+    #         # else:
+    #         #     go1.move([0.0, 0.0])
     #     else:
-    #         for step in range(int(sp.sensor_dt/sp.dt)):
-    #             action = [0,0]
-    #             go1.move(action)
-    #             t += sp.sensor_dt
-    #     if t >100:
-    #         break
+    #         print(go1.get_state())
+    #         time.sleep(0.2)
+
+    t = 0
+    cp = 0.59
+    while True:
+        # perception + cp
+        # boxes = get_boxes(sp)
+        boxes = np.array([[[0,0],[0.01,0.01]]])
+        boxes[:,0,:] -= cp
+        boxes[:,1,:] += cp
+        
+        # plan
+        state = state_to_planner(go1.state, sp)
+        start_idx = np.argmin(cdist(np.array(sp.Pset),state))
+
+        # print(start_idx,Pset[start_idx],state)
+        res = sp.plan(state, boxes)
+
+        #fig, ax = sp.world.show()
+        # plt.show()
+
+        # execute
+        if len(res[0]) > 1:
+            print(res[0])
+            # fig, ax = sp.show_connection(res[0])
+            # plt.show()
+            policy_before_trans = np.vstack(res[2])
+            policy = (np.array([[0,1],[-1,0]])@policy_before_trans.T).T
+            for step in range(int(sp.sensor_dt/sp.dt)):
+                action = policy[step]
+                print("action: ", action)
+                go1.move(action)
+                # update go1 state 
+                if debug:
+                    go1.get_true_state()
+                else:
+                    go1.get_state()
+                t += sp.sensor_dt
+                print("state: ", go1.state)
+            if go1.done:
+                break
+        else:
+            for step in range(int(sp.sensor_dt/sp.dt)):
+                print("BREAK 1")
+                action = [0,0]
+                go1.move(action)
+                t += sp.sensor_dt
+        if t >600:
+            print("BREAK 2")
+            break
 
     if debug:    
         rospy.spin()
