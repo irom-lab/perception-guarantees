@@ -32,9 +32,9 @@ def main(raw_args=None):
 
 	###################################################################
 	# Initialize dataset and dataloader
-	dataset = PointCloudDataset("data/features.pt", "data/bbox_labels.pt", "data/loss_mask.pt")
-	prior_dataset = PointCloudDataset("data/features_prior.pt", "data/bbox_labels_prior.pt", "data/loss_mask_prior.pt")
-	test_dataset = PointCloudDataset("data/features_test.pt", "data/bbox_labels_test.pt", "data/loss_mask_test.pt")
+	dataset = PointCloudDataset("data/features_prior.pt", "data/bbox_labels_prior.pt", "data/loss_mask_prior.pt")
+	prior_dataset = PointCloudDataset("data/features_test_old.pt", "data/bbox_labels_test_old.pt", "data/loss_mask_test_old.pt")
+	test_dataset = PointCloudDataset("data/features_old.pt", "data/bbox_labels_old.pt", "data/loss_mask_old.pt")
 	batch_size = 100 #100
 	N=len(dataset)
 	N_obj = dataset.bbox_labels.shape[2]
@@ -78,7 +78,7 @@ def main(raw_args=None):
 
 	# Run the finetuning  loop
 	print("Finetuning")
-	num_epochs = 50 # 1000
+	num_epochs = 100 # 1000
 	for epoch in range(0, num_epochs):
 
 		# Initialize running losses for this epoch
