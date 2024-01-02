@@ -51,7 +51,7 @@ if __name__ == "__main__":
     # Randomly visualize the meshes
     raw_model_name = 'raw_model.obj'
     print("Num environments", len(model_info_all))
-    for _, model_info in enumerate(model_info_all):
+    for i, model_info in enumerate(model_info_all):
         # model_info = random.choice(model_info_all)
         model_id, style, theme, material = model_info
         if model_id == 'b32c48ad-02bc-450d-a858-7bddb0bb7ae9':
@@ -60,6 +60,8 @@ if __name__ == "__main__":
             piece = trimesh.load(
                 os.path.join(args.mesh_folder, model_id, raw_model_name)
             )
+        # if (piece.bounds[1, 0]-piece.bounds[0, 0] >1.5 or piece.bounds[1, 1]-piece.bounds[0, 1] >1.5 or piece.bounds[1, 2]-piece.bounds[0, 2] >1.5):
+            print(i)
             print(f'Visualizing model_id: {model_id}')
             print(f'Style: {style}, Theme: {theme}, Material: {material}')
             print('Mesh x dimensions:', piece.bounds[:, 0])
