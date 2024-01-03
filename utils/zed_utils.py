@@ -57,7 +57,6 @@ class Zed:
         return quaternion, acceleration
     
     def get_pose(self):
-        # TODO: add in yaw
         t_translation = 0.0
         yaw = 0.0
         if self.zed.grab(self.runtime) == sl.ERROR_CODE.SUCCESS:
@@ -76,10 +75,19 @@ class Zed:
                 oz = round(self.camera_pose.get_orientation(self.py_orientation).get()[2], 3)
                 ow = round(self.camera_pose.get_orientation(self.py_orientation).get()[3], 3)
                 q = [ox, oy, oz, ow]
-                euler = tf.transformations.euler_from_quaternion(q)
-                yaw =  euler[2] # TODO: CHECK
+                
+                yaw = self.get_yaw_from_quat(q)
+                # euler = tf.transformations.euler_from_quaternion(q)
+                # yaw =  euler[2] # TODO: FIX this. Yaw is definitely wrong
 
         return t_translation, self.camera_pose.timestamp.get_microseconds(), yaw
+
+    def get_yaw_from_quat(self, quat):
+        # TODO: update this. yaw is wrong
+        rot = Rotation.from_quat(quat)
+        yaw = rot.as_euler('xyz', degrees=False)[2]
+
+        return yaw
     
     def get_pc(self):
         # TODO: add zed related functions for using the pointcloud

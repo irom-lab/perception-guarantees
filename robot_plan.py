@@ -4,6 +4,7 @@ from geometry_msgs.msg import TransformStamped
 from scipy.spatial.transform import Rotation
 import numpy as np
 from utils.go1_move import *
+from utils.plotting import *
 
 
 def state_to_planner(state, sp):
@@ -36,9 +37,17 @@ def get_boxes(sp):
 
 
 def plan_loop():
-    debug = True
-    if debug:
+    vicon = True # set if want vicon state active
+    state_type = 'vicon' # 'vicon' if want to set the state used as the vicon state, 'zed' 
+    replan = False # set if want to just follow open loop plan
+    save_traj = False  # set if want to save trajectory and compare against plan
+    plot_traj = True  # set if want to visualize trajectory at the end of execution
+
+    if vicon:
         rospy.init_node('listener', anonymous=True)
+        vicon_traj = []
+    
+    state_traj = []
     
     # planner
     # load pre-computed: need to recompute for actual gains
@@ -48,33 +57,50 @@ def plan_loop():
     Pset = pickle.load(f)
 
     # initialize planner
-    sp = Safe_Planner(goal_f=[7.5, -3.5, 0.0, 0.0], Pset=Pset, sensor_dt=2)
+    sp = Safe_Planner(goal_f=[7.5, -3.5, 0.0, 0.0], Pset=Pset, sensor_dt=1)
+    # sp = Safe_Planner(goal_f=[3.5, 3.5, 0.0, 0.0], Pset=Pset, sensor_dt=1)
     print(sp.goal)
-    print(len(reachable))
+    
     # sp.find_goal_reachable(reachable)
     sp.load_reachable(Pset, reachable)
 
-    go1 = Go1_move(sp, debug=debug)
+    go1 = Go1_move(sp, vicon=vicon, state_type=state_type)
     print(go1.state)
     time.sleep(2)
     
-    # motion debug
+    # motion/state debug
     # for t in range(100):
-    #     if debug:
-    #         print(go1.get_true_state())
-    #         time.sleep(0.2)
-    #         # if t <= 25:
-    #         #     go1.move([1.0, 0.0])
-    #         # elif t > 25 < 50:
-    #         #     go1.move([0.0, 0.4])
-    #         # else:
-    #         #     go1.move([0.0, 0.0])
-    #     else:
-    #         print(go1.get_state())
-    #         time.sleep(0.2)
+    #     if vicon:
+    #         go1.get_true_state()
+    #         print("true: ", go1.true_state)
+    #         go1.move([0.5, 0.0])
+                
+    #     go1.get_state()
+    #     print("state: ", go1.state)
+
+    #     time.sleep(0.2)
+    
 
     t = 0
     cp = 0.59
+
+    # GET INITIAL PLAN
+    # perception + cp
+    # boxes = get_boxes(sp)
+    boxes = np.array([[[0,0],[0.01,0.01]]])
+    boxes[:,0,:] -= cp
+    boxes[:,1,:] += cp
+    
+    # plan
+    state = state_to_planner(go1.state, sp)
+    start_idx = np.argmin(cdist(np.array(sp.Pset),state))
+
+    # print(start_idx,Pset[start_idx],state)
+    res = sp.plan(state, boxes)
+
+    # fig, ax = sp.world.show()
+    # plt.show()
+
     while True:
         # perception + cp
         # boxes = get_boxes(sp)
@@ -82,20 +108,22 @@ def plan_loop():
         boxes[:,0,:] -= cp
         boxes[:,1,:] += cp
         
-        # plan
-        state = state_to_planner(go1.state, sp)
-        start_idx = np.argmin(cdist(np.array(sp.Pset),state))
+        if replan:
+            # plan
+            state = state_to_planner(go1.state, sp)
+            start_idx = np.argmin(cdist(np.array(sp.Pset),state))
 
-        # print(start_idx,Pset[start_idx],state)
-        res = sp.plan(state, boxes)
-
-        #fig, ax = sp.world.show()
-        # plt.show()
+            # print(start_idx,Pset[start_idx],state)
+            res = sp.plan(state, boxes)
 
         # execute
         if len(res[0]) > 1:
             print(res[0])
             # fig, ax = sp.show_connection(res[0])
+            # plt.show()
+            fig, ax = sp.show(res[0])
+            plt.show()
+            # fig, ax = plot_trajectories(res[0], sp)
             # plt.show()
             policy_before_trans = np.vstack(res[2])
             policy = (np.array([[0,1],[-1,0]])@policy_before_trans.T).T
@@ -104,11 +132,14 @@ def plan_loop():
                 print("action: ", action)
                 go1.move(action)
                 # update go1 state 
-                if debug:
-                    go1.get_true_state()
-                else:
-                    go1.get_state()
-                t += sp.sensor_dt
+                if vicon:
+                    vicon_state, vicon_yaw, vicon_ts = go1.get_true_state()
+                    vicon_traj.append(vicon_state)
+                
+                state, ts = go1.get_state()
+                state_traj.append(state)
+                t += sp.dt
+                print("t: ", t)
                 print("state: ", go1.state)
             if go1.done:
                 break
@@ -118,11 +149,18 @@ def plan_loop():
                 action = [0,0]
                 go1.move(action)
                 t += sp.sensor_dt
-        if t >600:
+        if t > 100:
+            # time safety break
             print("BREAK 2")
             break
 
-    if debug:    
+    if plot_traj:
+        # currently only set up for open loop init plan
+        print(res[0])
+        fig, ax = plot_trajectories(res[0], sp)
+        plt.show()
+
+    if vicon:    
         rospy.spin()
 
 if __name__ == '__main__':
