@@ -321,8 +321,8 @@ class Safe_Planner:
     def show(self,idx_solution):
         '''Plot solution'''
         fig, ax = self.world.show()
-        for i in range(self.n_samples):
-            ax.scatter(self.Pset[i][0],self.Pset[i][1], s=1, color = 'k', marker = '.')
+        # for i in range(self.n_samples):
+        #     ax.scatter(self.Pset[i][0],self.Pset[i][1], s=1, color = 'k', marker = '.')
         for i in range(len(idx_solution)-1):
             s0 = idx_solution[i] #idx
             s1 = idx_solution[i+1] #idx
