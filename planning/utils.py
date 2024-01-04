@@ -94,13 +94,16 @@ def cost_optimal(state0, state1, r):
     def cost(t):
         x = state1-expm(A*t)@state0
         G = gramian(t)
-        # if np.linalg.det(G) == 0:
-            # G = G + np.eye(4)
-            # print(G)
         c =t+x.T@np.linalg.inv(G)@x
         return c
+    def cost_dot(t):
+        x = state1-expm(A*t)@state0
+        G = gramian(t)
+        d = np.linalg.inv(G)@x
+        return 1-2*(A@state1).T@d-d.T@BRB@d
     
-    t_star = opt.minimize(cost, r/2, bounds = [(0,r)], method = 'trust-constr', options={'gtol': 1e-3, 'maxiter': 10}).x[0]
+    # t_star = opt.minimize(cost, r/8, bounds = [(0,r)], method = 'trust-constr', options={'gtol': 1e-3, 'maxiter': 10}).x[0]
+    t_star = opt.root(cost_dot, 0.1).x[0]
     return cost(t_star), t_star
 
 def forward_box(state, r, vx_range, vy_range):
@@ -147,6 +150,8 @@ def filter_reachable(state: np.ndarray, state_set: list, r, vx_range, vy_range, 
     elif direction == 'B':
         box = backward_box
     
+    rip = 0
+
     xmax, ymax, xmin, ymin= box(state,r,vx_range,vy_range)
     state_set_filtered = []
     cost_set_filtered = []
@@ -165,11 +170,18 @@ def filter_reachable(state: np.ndarray, state_set: list, r, vx_range, vy_range, 
                         x,u = gen_trajectory(state, state_i, time, dt)
                     elif direction == 'B':
                         x,u = gen_trajectory(state_i, state, time, dt)
-                    if np.all(-4<=u[:,0]) and np.all(u[:,0]<=4) and np.all(-4<=u[:,1]) and np.all(u[:,1]<=4):
+                    if (np.all(min(vx_range)-0.2<=u[:,0]) and np.all(u[:,0]<=max(vx_range)+0.2) 
+                        and np.all(min(vy_range)-0.2<=u[:,1]) and np.all(u[:,1]<=max(vy_range)+0.2)
+                        and np.all(min(vx_range)-0.1<=x[:,2]) and np.all(x[:,2]<=max(vx_range)+0.1)
+                        and np.all(min(vy_range)-0.1<=x[:,3]) and np.all(x[:,3]<=max(vy_range)+0.1)
+                        and np.all(0<=x[:,0]) and np.all(x[:,0]<=8) and np.all(0<=x[:,1]) and np.all(x[:,1]<18)):
                         state_set_filtered.append(idx)
                         cost_set_filtered.append(cost)
                         time_set_filtered.append(time)
                         traj_set_filtered.append((x,u))
+                    else:
+                        rip += 1
+    print('rip',rip)
     return state_set_filtered, cost_set_filtered, time_set_filtered, traj_set_filtered
 
 
