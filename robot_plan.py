@@ -37,30 +37,37 @@ def get_boxes(sp):
 
 
 def plan_loop():
-    vicon = True # set if want vicon state active
+    # ****************************************************
+    # SET DESIRED FLAGS
+    vicon = True # set if want vicon state active; If true, make sure ./vicon.sh is running from pg_ws (and zed box connected to gas dynamics network)
     state_type = 'vicon' # 'vicon' if want to set the state used as the vicon state, 'zed' 
     replan = False # set if want to just follow open loop plan
     save_traj = False  # set if want to save trajectory and compare against plan
     plot_traj = True  # set if want to visualize trajectory at the end of execution
-
+    result_dir = 'results/trial_name' # set to unique trial identifier if saving results
+    goal_forrestal = [7.0, -2.0, 0.0, 0.0] # goal in forrestal coordinates
+    reachable_file = 'planning/pre_compute/reachable_2k.pkl'
+    pset_file = 'planning/pre_compute/Pset_2k.pkl'
+    num_samples = 2000  # number of samples used for the precomputed files
+    
+    # ****************************************************
     if vicon:
         rospy.init_node('listener', anonymous=True)
-        vicon_traj = []
-    
+        
+    vicon_traj = []
     state_traj = []
     
-    # planner
     # load pre-computed: need to recompute for actual gains
-    f = open('planning/pre_compute/reachable_cost5_newdim.pkl', 'rb')
+    f = open(reachable_file, 'rb')
     reachable = pickle.load(f)
-    f = open('planning/pre_compute/Pset_cost5_newdim.pkl', 'rb')
+    f = open(pset_file, 'rb')
     Pset = pickle.load(f)
 
     # initialize planner
-    sp = Safe_Planner(goal_f=[7.5, -3.5, 0.0, 0.0], Pset=Pset, sensor_dt=1)
-    # sp = Safe_Planner(goal_f=[3.5, 3.5, 0.0, 0.0], Pset=Pset, sensor_dt=1)
-    print(sp.goal)
+    sp = Safe_Planner(goal_f=goal_forrestal, Pset=Pset, sensor_dt=1, n_samples=num_samples)
+    print("goal (planner coords)", sp.goal)
     
+    # *** Alternate commenting of two lines below if goal changes
     # sp.find_goal_reachable(reachable)
     sp.load_reachable(Pset, reachable)
 
@@ -68,7 +75,8 @@ def plan_loop():
     print(go1.state)
     time.sleep(2)
     
-    # motion/state debug
+    # ****************************************************
+    # QUICK MOTION/STATE DEBUG CODE. Comment out planning
     # for t in range(100):
     #     if vicon:
     #         go1.get_true_state()
@@ -79,12 +87,14 @@ def plan_loop():
     #     print("state: ", go1.state)
 
     #     time.sleep(0.2)
-    
 
+    
+    # ****************************************************
+    # GET INITIAL PLAN
+    
     t = 0
     cp = 0.59
 
-    # GET INITIAL PLAN
     # perception + cp
     # boxes = get_boxes(sp)
     boxes = np.array([[[0,0],[0.01,0.01]]])
@@ -101,6 +111,8 @@ def plan_loop():
     # fig, ax = sp.world.show()
     # plt.show()
 
+    # ****************************************************
+    # EXECUTION LOOP
     while True:
         # perception + cp
         # boxes = get_boxes(sp)
@@ -121,8 +133,8 @@ def plan_loop():
             print(res[0])
             # fig, ax = sp.show_connection(res[0])
             # plt.show()
-            fig, ax = sp.show(res[0])
-            plt.show()
+            # fig, ax = sp.show(res[0])
+            # plt.show()
             # fig, ax = plot_trajectories(res[0], sp)
             # plt.show()
             policy_before_trans = np.vstack(res[2])
@@ -149,15 +161,14 @@ def plan_loop():
                 action = [0,0]
                 go1.move(action)
                 t += sp.sensor_dt
-        if t > 100:
+        if t > 1:
             # time safety break
             print("BREAK 2")
             break
 
     if plot_traj:
         # currently only set up for open loop init plan
-        print(res[0])
-        fig, ax = plot_trajectories(res[0], sp)
+        fig, ax = plot_trajectories(res[0], sp, vicon_traj, state_traj)
         plt.show()
 
     if vicon:    

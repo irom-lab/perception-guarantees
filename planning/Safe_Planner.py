@@ -170,7 +170,14 @@ class Safe_Planner:
 
     def state_to_planner(self, state):
         # convert robot state to planner coordinates
-        return (np.array([[[0,-1,0,0],[1,0,0,0],[0,0,0,-1],[0,0,1,0]]])@np.array(state) + np.array([self.world.w/2,0,0,0]))[0]
+        # return (np.array([[[0,-1,0,0],[1,0,0,0],[0,0,0,-1],[0,0,1,0]]])@np.array(state) + np.array([self.world.w/2,0,0,0]))[0]
+        state = np.array(state)
+        state = np.atleast_2d(state)
+        origin_shift = np.atleast_2d(np.array([self.world.w/2,0,0,0]))
+
+        state_tf = (np.array([[[0,-1,0,0],[1,0,0,0],[0,0,0,-1],[0,0,1,0]]]) @ state.T + origin_shift.T)
+
+        return state_tf.squeeze()
 
     # preparation
     
@@ -314,8 +321,8 @@ class Safe_Planner:
     def show(self,idx_solution):
         '''Plot solution'''
         fig, ax = self.world.show()
-        # for i in range(self.n_samples):
-        #     ax.scatter(self.Pset[i][0],self.Pset[i][1], s=1, color = 'k', marker = '.')
+        for i in range(self.n_samples):
+            ax.scatter(self.Pset[i][0],self.Pset[i][1], s=1, color = 'k', marker = '.')
         for i in range(len(idx_solution)-1):
             s0 = idx_solution[i] #idx
             s1 = idx_solution[i+1] #idx

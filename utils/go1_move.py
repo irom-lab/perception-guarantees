@@ -21,8 +21,8 @@ class Go1_move():
 
         # initialize states
         if vicon:
-            self.vicon_state = ViconStateListener("vicon/strelka/strelka", "x") 
-            # self.vicon_state = ViconStateListener("vicon/cobs_alec/cobs_alec", "x") 
+            # self.vicon_state = ViconStateListener("vicon/strelka/strelka", "x") 
+            self.vicon_state = ViconStateListener("vicon/cobs_alec/cobs_alec", "x") 
 
             # wait for initial state read
             if (self.vicon_state.timestamp == 0.0):
@@ -57,8 +57,8 @@ class Go1_move():
         if self.state_type == 'zed':
             pos_state, timestamp, self.yaw = self.camera.get_pose()
             if timestamp != self.timestamp:
-                vx, vy = self.calc_velocity(self.state[0], self.state[2], self.timestamp, pos_state[0], pos_state[1], timestamp)
-                state = [pos_state[0], vx, pos_state[1], vy]
+                vx, vy = self.calc_velocity(self.state[0], self.state[1], self.timestamp, pos_state[0], pos_state[1], timestamp)
+                state = [pos_state[0], pos_state[1], vx, vy]
 
                 print("zed YAW", self.yaw)
 
@@ -75,8 +75,8 @@ class Go1_move():
     def get_true_state(self):
         x, y, timestamp = self.vicon_state.x, self.vicon_state.y, self.vicon_state.timestamp
         if timestamp != self.ts_timestamp:
-            vx, vy = self.calc_velocity(self.true_state[0], self.true_state[2], self.ts_timestamp, x, y, timestamp, units='seconds')
-            state = [x, vx, y, vy]
+            vx, vy = self.calc_velocity(self.true_state[0], self.true_state[1], self.ts_timestamp, x, y, timestamp, units='seconds')
+            state = [x, y, vx, vy]
             self.ts_yaw = self.vicon_state.yaw
             # update state and timestamp
             self.true_state = state
