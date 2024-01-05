@@ -42,9 +42,9 @@ def plan_loop():
     vicon = True # set if want vicon state active; If true, make sure ./vicon.sh is running from pg_ws (and zed box connected to gas dynamics network)
     state_type = 'vicon' # 'vicon' if want to set the state used as the vicon state, 'zed' 
     replan = False # set if want to just follow open loop plan
-    save_traj = False  # set if want to save trajectory and compare against plan
+    save_traj = True  # set if want to save trajectory and compare against plan
     plot_traj = True  # set if want to visualize trajectory at the end of execution
-    result_dir = 'results/trial_name' # set to unique trial identifier if saving results
+    result_dir = 'results/trial_name/' # set to unique trial identifier if saving results
     goal_forrestal = [7.0, -2.0, 0.0, 0.0] # goal in forrestal coordinates
     reachable_file = 'planning/pre_compute/reachable_2k.pkl'
     pset_file = 'planning/pre_compute/Pset_2k.pkl'
@@ -166,10 +166,20 @@ def plan_loop():
             print("BREAK 2")
             break
 
+    if save_traj:
+        check_dir(result_dir)
+        np.save(result_dir + 'plan.npy', res[0]) # initial open loop plan atm
+        np.save(result_dir + 'state_traj.npy', state_traj)
+        if vicon:
+            np.save(result_dir + 'vicon_traj.npy', vicon_traj)
+        # TODO: add anything else to save for a trial
+
     if plot_traj:
         # currently only set up for open loop init plan
         fig, ax = plot_trajectories(res[0], sp, vicon_traj, state_traj)
+        # TODO: add plt.save()
         plt.show()
+
 
     if vicon:    
         rospy.spin()

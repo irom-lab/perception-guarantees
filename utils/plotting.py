@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 
 def plot_trajectories(idx_solution, sp, vicon_traj, state_traj): #executed_traj):
     '''Plot solution'''
@@ -22,6 +23,11 @@ def plot_trajectories(idx_solution, sp, vicon_traj, state_traj): #executed_traj)
         ax.plot(vicon_tf[0, :], vicon_tf[1, :], c='blue', linewidth=1)
     # plt.show()
 
-def check_dir():
+def check_dir(path):
     # check if directory exists, if not create
-    pass
+    if not os.path.exists(path):
+        os.makedirs(path)
+        print(f"Directory '{path}' created.")
+
+    else:
+        print(f"Directory '{path}' already exists.")
