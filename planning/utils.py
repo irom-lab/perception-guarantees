@@ -367,8 +367,8 @@ def plot_frontier(occ_space, world_box, start, FoV,radius):
     ax.set_xlim([-0.1,world_box[1][0]+0.1])
     ax.set_ylim([-0.1,world_box[1][1]+0.1])
     for geom in occ_space.geoms:    
-            xs, ys = geom.exterior.xy    
-            ax.fill(xs,ys, edgecolor = 'k',fc=(0, 0.4470, 0.7410,0.5))
+        xs, ys = geom.exterior.xy    
+        ax.fill(xs,ys, edgecolor = 'k',fc=(0, 0.4470, 0.7410,0.5))
     for segment in segments_dict.values():
         ax.plot([segment[0,0],segment[1,0]],[segment[0,1],segment[1,1]])
     if len(candidates) > 0:
@@ -431,7 +431,7 @@ def trace_polygon(ray1_, ray2_, same_box, world):
     else:
         return np.array(same_box.coords.xy)[:,box_start_idx:box_end_idx].T
 
-def find_polygon(ray_objects, world): # the most promising one
+def find_polygon(ray_objects, world): 
     
     vs = [ray_objects[0].start,ray_objects[0].end]
 

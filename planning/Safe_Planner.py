@@ -6,6 +6,8 @@ from matplotlib.patches import Rectangle
 
 import time as tm
 import pickle
+import concurrent.futures
+
 
 from shapely.geometry import Point, MultiPolygon, Polygon, LineString, MultiPoint
 from shapely.ops import unary_union
@@ -52,7 +54,7 @@ class World:
         new_occ_space = np.array(new_boxes)
         # world = Polygon([[0,0],[0,self.h],[self.w,self.h],[self.w,0],[0,0]])
         if self.counter == 0:
-            self.occ_space = unary_union(turn_box(new_occ_space))
+            self.occ_space = unary_union(turn_box(new_boxes[0:-1]))
         else:
             self.occ_space = non_det_filter(self.occ_space, new_occ_space)
         
@@ -92,15 +94,18 @@ class World:
         fig, ax = plt.subplots()
         ax.set_xlim([0,self.w])
         ax.set_ylim([0,self.h])
+        ax.set_aspect('equal')
         if self.occ_space.geom_type == 'Polygon':
             self.occ_space = MultiPolygon([self.occ_space])
         for geom in self.occ_space.geoms:    
             xs, ys = geom.exterior.xy    
             ax.fill(xs,ys, edgecolor = 'k',fc='r')
+        if self.free_space_new is not None:
+            xs, ys = self.free_space_new.exterior.xy  
+            ax.fill(xs,ys, edgecolor = 'k',fc=(0.941, 0.416, 0.725, 0.471))
         if self.free_space is not None:
             xs, ys = self.free_space.exterior.xy  
             ax.fill(xs,ys, edgecolor = 'k',fc=(0, 0.4470, 0.7410,0.5))
-        
         return fig, ax
     
     def show_occlusion(self,polygons):
@@ -113,25 +118,27 @@ class World:
 
 class Safe_Planner:
     def __init__(self,
-                 Pset: list,
+                 # Pset: list,
                  world_box: np.ndarray = np.array([[0,0],[8,18]]),
                  vx_range: list = [-0.5,0.5],
                  vy_range: list = [0,1],
                  sr: float = 1.0, # initial clearance
-                 init_state: list = [4,0.5,0,0],
-                 goal_f: list = [7.5,7.5,0,0], # forrestal coordinates
-                 dt: float = 0.1, #time resolution for controls
+                 init_state: list = [4,1,0,0.5],
+                 goal_f: list = [7,-2,0.5,0], # forrestal coordinates
+                 dt: float = 0.01, #time resolution for controls
                  sensor_dt: float = 1, #time resolution for perception update
-                 r = 4, #cost threshold for reachability
+                 r = 3, #cost threshold for reachability
                  radius = 0.5, #radius for finding intermediate goals
                  FoV = 70*np.pi/180, #field of view
+                 FoV_range = 5, #range of field of view
+                 FoV_close = 1,
                  n_samples = 1000,
                  max_search_iter = 1000,
                  neighbor_radius = 0.5, #for non-dynamics planning
                  seed = 0):
         # load inputs
 
-        self.Pset = Pset
+        # self.Pset = Pset
 
         self.world_box = world_box
         self.vx_range = vx_range
@@ -151,6 +158,8 @@ class Safe_Planner:
         self.r = r
         self.radius = radius
         self.FoV = FoV
+        self.FoV_range = FoV_range
+        self.FoV_close = FoV_close
         self.n_samples = n_samples
         self.max_search_iter = max_search_iter
         self.neighbor_radius = neighbor_radius
@@ -191,8 +200,18 @@ class Safe_Planner:
         #     node = self.prng.uniform((0,0,min(self.vx_range),min(self.vy_range)), #mins
         #                              (self.world.w,self.world.h,max(self.vx_range),max(self.vy_range))) #maxs
         #     self.Pset.append(node)
-        self.Pset.append(self.goal)
+        # self.Pset.append(self.goal)
 
+        # sample nodes on grid
+        self.Pset = []
+        for i in np.linspace(0.5,self.world.w-0.5,15):
+            for j in np.linspace(0.5,self.world.h-0.5,15):
+                for k in np.linspace(min(self.vx_range),max(self.vx_range),5):
+                    # for l in np.linspace(min(self.vy_range),max(self.vy_range),3):
+                    self.Pset.append([i,j,k,0.5])
+        self.n_samples = len(self.Pset)
+        self.Pset.append(self.goal)
+        
         # pre-compute reachable sets
         @ray.remote # speed up
         def compute_reachable(node_idx):
@@ -249,14 +268,40 @@ class Safe_Planner:
         start = self.Pset[start_idx]
         v = np.sqrt(start[2]**2 + start[3]**2)
         
-        frontier = find_frontier(self.world.occ_space, self.world_box, start, self.FoV) # list of [x_start, y_start, x_end, y_end]
-        candidates = find_candidates(frontier, self.radius) # list of segment midpoints
+        # frontier = find_frontier(self.world.occ_space, self.world_box, start, self.FoV) # list of [x_start, y_start, x_end, y_end]
+        # sense_range = start[1]+self.FoV_range*np.cos(self.FoV/2)
+        # ind = np.where(np.isclose(self.world.free_space.exterior.xy[1],sense_range))[0]
+        # sg0 = np.array([self.world.free_space.exterior.xy[0][ind[0]],self.world.free_space.exterior.xy[1][ind[0]]])
+        # sg1 = np.array([self.world.free_space.exterior.xy[0][ind[-1]],self.world.free_space.exterior.xy[1][ind[-1]]])
+        # frontier[0] = np.array([sg0,sg1])
+        # # print(frontier)
+        # candidates = find_candidates(frontier, self.radius) # list of segment midpoints
+        # print('candidates: ', candidates)
+
+        candidates = [self.world.free_space.exterior.interpolate(t).xy for t in 
+                      np.linspace(0,self.world.free_space.length,
+                                  int(np.floor(self.world.free_space.length/self.radius)),False)]
+
+        obstacle_ys_all = []
+        for geom in self.world.occ_space.geoms:
+            obstacle_ys_all.extend(geom.exterior.coords.xy[1])
+        obstacle_ys = np.unique(obstacle_ys_all)
+
+        candidates = [c for c in candidates if c[1][0] not in obstacle_ys]
+
+        fig, ax = self.world.show()
+        if len(candidates) > 0:
+            ax.scatter(*zip(*candidates))
+        plt.show()
 
         costs = []
         subgoal_idxs = []
-        
+    
         for subgoal in candidates:
-            subgoal_idx = np.argmin(cdist(np.array(self.Pset)[:,0:2],np.array([subgoal])))
+            subgoal_idx_all = np.argsort(cdist(np.array(self.Pset)[:,0:2],np.array(subgoal).T), axis=0)
+            valid_idx = np.where(self.bool_valid[subgoal_idx_all])[0]
+            subgoal_idx = subgoal_idx_all[valid_idx[0]][0]
+            print('subgoal idx: ', subgoal_idx, self.bool_valid[subgoal_idx],self.bool_valid[subgoal_idx_all[0]])
             subgoal_idxs.append(subgoal_idx)
             if any([all(i == self.Pset[subgoal_idx][0:2]) for i in self.goal_explored]):
                 # this subgoal is already explored
@@ -282,9 +327,8 @@ class Safe_Planner:
         '''Returns occlusion polygon'''
         start = self.Pset[start_idx][0:2]
         world = LineString([[0,0],[0,self.world.h],[self.world.w,self.world.h],[self.world.w,0],[0,0]])
-
+        
         frontier = find_frontier(self.world.occ_space, self.world_box, start, self.FoV)
-
         rays = list(frontier.keys())
         rays.sort()
 
@@ -308,14 +352,18 @@ class Safe_Planner:
             if direction == 'F':
                 fset = self.reachable[i][1]
                 for j in range(len(fset[0])):
-                    show_trajectory(ax, self.Pset[i],
-                                    self.Pset[fset[0][j]],fset[1][j],self.dt)
+                    # show_trajectory(ax, self.Pset[i],
+                    #                 self.Pset[fset[0][j]],fset[1][j],self.dt)
+                    traj = self.reachable[i][1][3][j][0]
+                    ax.plot(traj[:,0], traj[:,1], c='gray', linewidth=0.5)
 
             elif direction == 'B':
                 bset = self.reachable[i][2]
                 for j in range(len(bset[0])):
-                    show_trajectory(ax, self.Pset[bset[0][j]],
-                                    self.Pset[i],bset[1][j],self.dt)
+                    # show_trajectory(ax, self.Pset[bset[0][j]],
+                    #                 self.Pset[i],bset[1][j],self.dt)
+                    traj = self.reachable[i][2][3][j][0]
+                    ax.plot(traj[:,0], traj[:,1], c='gray', linewidth=0.5)
         plt.show()
     
     def show(self,idx_solution):
@@ -334,6 +382,7 @@ class Safe_Planner:
     def show_connection(self, idx_solution):
         '''Plot connected tree, solution, and world'''
         fig, ax = self.world.show()
+        ax.set_aspect('equal')
         for i in range(self.n_samples):
             ax.scatter(self.Pset[i][0],self.Pset[i][1], s=1, color = 'k',marker = '.')
         for i in range(self.n_samples):
@@ -353,27 +402,28 @@ class Safe_Planner:
             ax.plot(x_waypoints[:,0], x_waypoints[:,1], c='red', linewidth=1)
         plt.show()
     
-    def plot_velocity(self, idx_solution):
+    def plot_velocity(self, res):
         '''Plot velocity profile'''
-        fig, axs = plt.subplots(2,2)
+        fig, axs = plt.subplots(3,2)
         fig.suptitle('Velocity Profile')
+        fig.tight_layout(pad=2.0)
         axs[0,0].set_title('$v_x(t)$')
         axs[0,1].set_title('$u_x(t)$')
         axs[1,0].set_title('$v_y(t)$')
         axs[1,1].set_title('$u_y(t)$')
+        axs[2,0].set_title('$v(t)$')
+        axs[2,1].set_title('$y(t)$')
         t = 0
-        for i in range(len(idx_solution)-1):
-            s0 = idx_solution[i]
-            s1 = idx_solution[i+1]
-            x_waypoints = self.reachable[s0][1][3][self.reachable[s0][1][0].index(s1)][0]
-            u_waypoints = self.reachable[s0][1][3][self.reachable[s0][1][0].index(s1)][1]
-            t_array = np.arange(t,t+len(x_waypoints)*self.dt,self.dt)
+        for i in range(len(res[0])-1):
+    
+            t_array = np.linspace(t+self.dt,t+len(res[1][i])*self.dt,len(res[1][i]))
             t = t_array[-1]
-            axs[0,0].plot(t_array, x_waypoints[:,2],'k-')
-            axs[0,1].plot(t_array, u_waypoints[:,0],'k-')
-            axs[1,0].plot(t_array, x_waypoints[:,3],'k-')
-            axs[1,1].plot(t_array, u_waypoints[:,1],'k-')
-
+            axs[0,0].plot(t_array, res[1][i][:,2],'k-')
+            axs[0,1].plot(t_array, res[2][i][:,0],'k-')
+            axs[1,0].plot(t_array, res[1][i][:,3],'k-')
+            axs[1,1].plot(t_array, res[2][i][:,1],'k-')
+            axs[2,0].plot(t_array, np.sqrt(res[1][i][:,2]**2 + res[1][i][:,3]**2),'k-')
+            axs[2,1].plot(t_array, res[1][i][:,1],'k-')
         plt.show()
 
     def check_collision(self,node_idx):
@@ -386,6 +436,9 @@ class Safe_Planner:
         start = tm.time()
         
         # apply filter to update the world
+        tooclose = np.array([[[state[0,0]-self.FoV_close,state[0,1]-self.FoV_close],
+                             [state[0,0]+self.FoV_close,state[0,1]+self.FoV_close]]])
+        new_boxes = np.append(new_boxes,tooclose,axis=0)
         self.world.update(new_boxes)
 
         # finds nearest sampled node to current state
@@ -399,7 +452,11 @@ class Safe_Planner:
 
         # occlusion
         new_free_space = self.occlusion(start_idx)
+        self.world.free_space_new = new_free_space
         self.world.free_space = self.world.free_space.union(new_free_space)
+        sense_range = self.Pset[start_idx][1]+self.FoV_range*np.cos(self.FoV/2)
+        self.world.free_space = self.world.free_space.intersection(
+            Polygon(((0,0),(0,sense_range),(self.world.w,sense_range),(self.world.w,0),(0,0))))
 
         # initialize planner
         self.cost = np.zeros(self.n_samples+1)
@@ -453,6 +510,7 @@ class Safe_Planner:
         # output controls
         x_waypoints = []
         u_waypoints = []
+        print(idx_solution)
         for i in range(len(idx_solution)-1):
             s0 = idx_solution[i] #idx
             s1 = idx_solution[i+1] #idx
@@ -511,7 +569,6 @@ class Safe_Planner:
             # def process_idx(idx_near):
             for idx_near in idxset_near:
                     # Y_near <- R-(x) \cap H
-                now = tm.time()
                 if dynamics:
                     R_minus = self.reachable[idx_near][2]
                     idxset_cand = list(set(R_minus[0]) & set(idxset_open)) #index in Pset
@@ -522,9 +579,6 @@ class Safe_Planner:
                 else:
                     idxset_cand, distset_cand = self.filter_neighbors(self.Pset[idx_near], idxset_open)
                     timeset_cand = [0]*len(idxset_cand)
-                
-                now1 = tm.time()
-                # print('time to find candidates: ', now1-now)
                 
                 if len(idxset_cand) == 0:
                     continue
