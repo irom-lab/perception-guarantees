@@ -10,7 +10,6 @@ import robot_interface as sdk
 class Go1_move():
     def __init__(self, sp, vicon=False, state_type='zed'):
         self.sp = sp
-        self.done = False # TODO: Set stopping condition
         self.state = [0.0, 0.0, 0.0, 0.0]
         self.true_state = [0.0, 0.0, 0.0, 0.0]
         self.yaw = 0.0
@@ -18,11 +17,12 @@ class Go1_move():
         self.timestamp = 0
         self.ts_timestamp = 0
         self.state_type = state_type
+        self.goal = sp.goal_f
 
         # initialize states
         if vicon:
-            # self.vicon_state = ViconStateListener("vicon/strelka/strelka", "x") 
-            self.vicon_state = ViconStateListener("vicon/cobs_alec/cobs_alec", "x") 
+            self.vicon_state = ViconStateListener("vicon/strelka/strelka", "x") 
+            # self.vicon_state = ViconStateListener("vicon/cobs_alec/cobs_alec", "x") 
 
             # wait for initial state read
             if (self.vicon_state.timestamp == 0.0):
@@ -69,7 +69,7 @@ class Go1_move():
         elif self.state_type == 'vicon':
             self.state, self.yaw, timestamp = self.get_true_state()
             self.timestamp = timestamp
-
+        
         return self.state, timestamp
 
     def get_true_state(self):
@@ -96,8 +96,17 @@ class Go1_move():
         vy = (y2 - y1) / delta_t
         return vx, vy
 
+    def check_goal(self):
+        if (np.abs(self.state[0] - self.goal[0]) < 0.2) and (np.abs(self.state[1] - self.goal[1]) < 0.2):
+            print("AT GOAL! :)")
+            self.stop()
+
+            return True
+    
+        else:
+            return False
+
     def correct_yaw(self):
-        # TODO: add in yaw correction
         return -self.yaw/1.0
         
     def move(self, action):
@@ -116,6 +125,17 @@ class Go1_move():
 
         self.udp.SetSend(self.cmd)
         self.udp.Send()
+
+    def stop(self):
+        self.cmd.mode = 0
+        self.cmd.gaitType = 1
+        self.cmd.velocity = [0, 0] # -1  ~ +1
+        self.cmd.yawSpeed = 0
+        self.cmd.bodyHeight = 0.0
+
+        self.udp.SetSend(self.cmd)
+        self.udp.Send()
+
 
 
 
