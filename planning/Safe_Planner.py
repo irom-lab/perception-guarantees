@@ -289,10 +289,10 @@ class Safe_Planner:
 
         candidates = [c for c in candidates if c[1][0] not in obstacle_ys]
 
-        fig, ax = self.world.show()
-        if len(candidates) > 0:
-            ax.scatter(*zip(*candidates))
-        plt.show()
+        # fig, ax = self.world.show()
+        # if len(candidates) > 0:
+        #    ax.scatter(*zip(*candidates))
+        #  plt.show()
 
         costs = []
         subgoal_idxs = []
@@ -301,9 +301,9 @@ class Safe_Planner:
             subgoal_idx_all = np.argsort(cdist(np.array(self.Pset)[:,0:2],np.array(subgoal).T), axis=0)
             valid_idx = np.where(self.bool_valid[subgoal_idx_all])[0]
             subgoal_idx = subgoal_idx_all[valid_idx[0]][0]
-            print('subgoal idx: ', subgoal_idx, self.bool_valid[subgoal_idx],self.bool_valid[subgoal_idx_all[0]])
+            # print('subgoal idx: ', subgoal_idx, self.bool_valid[subgoal_idx],self.bool_valid[subgoal_idx_all[0]])
             subgoal_idxs.append(subgoal_idx)
-            if any([all(i == self.Pset[subgoal_idx][0:2]) for i in self.goal_explored]):
+            if any([(i == self.Pset[subgoal_idx][0:2]) for i in self.goal_explored]):
                 # this subgoal is already explored
                 costs.append(np.inf)
             else:
@@ -314,7 +314,7 @@ class Safe_Planner:
                 start_idx = subgoal_idx
                 _, _, dist_to_go = self.solve(start_idx, dynamics=False, ICS=False)
                 # append + return to original
-                costs.append(cost_to_come + dist_to_go/v)
+                costs.append(0.1*cost_to_come + 10*dist_to_go/v)
         
         if all(np.isinf(costs)):
             return None, None
@@ -442,7 +442,10 @@ class Safe_Planner:
         self.world.update(new_boxes)
 
         # finds nearest sampled node to current state
-        start_idx = np.argmin(cdist(np.array(self.Pset),np.array(state)))
+        # start_idx = np.argmin(cdist(np.array(self.Pset)[:,0:2],np.array(state)[:,0:2]))
+        start_idx_all = np.argsort(cdist(np.array(self.Pset)[:,0:2],np.array(state)[:,0:2]), axis=0)
+        valid_idx = np.where(self.bool_valid[start_idx_all])[0]
+        start_idx = start_idx_all[valid_idx[0]][0]
         self.goal_idx = self.n_samples
 
         # start in box?

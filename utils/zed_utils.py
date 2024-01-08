@@ -16,7 +16,7 @@ class Zed:
             exit()
         init = sl.InitParameters(depth_mode=sl.DEPTH_MODE.NEURAL,
                                 coordinate_units=sl.UNIT.METER,
-                                coordinate_system=sl.COORDINATE_SYSTEM.RIGHT_HANDED_Y_UP,
+                                coordinate_system=sl.COORDINATE_SYSTEM.RIGHT_HANDED_Z_UP_X_FWD,
                                 depth_minimum_distance = 0.15,
                                 depth_maximum_distance = 8)
         self.parse_args(init)
