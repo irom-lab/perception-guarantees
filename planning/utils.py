@@ -219,13 +219,13 @@ def show_trajectory(ax, s0, s1, tau, dt, c_='gray', linewidth_=0.5):
         M[:, i] = x_waypoints[i]
     ax.plot(M[0, :], M[1, :], c=c_, linewidth=linewidth_)
 
-def gen_path(s0, s1, dx):
+def gen_path(s0, s1, dt):
     '''Generates straight path without dynamics'''
     dx, dy = s1[0] - s0[0], s1[1] - s0[1]
     yaw = np.arctan2(dy, dx)
     d = np.hypot(dx, dy)
     print(d,dx)
-    steps = np.arange(0, d, dx).reshape(-1, 1)
+    steps = np.arange(0, d, dt).reshape(-1, 1)
     pts = s0[0:2] + steps * np.array([np.cos(yaw), np.sin(yaw)])
     return np.vstack((pts, s1[0:2]))
 
