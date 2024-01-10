@@ -286,10 +286,10 @@ class Safe_Planner:
         candidates = [c for c in candidates if 
                       c[0][0] not in obstacle_xs and c[1][0] not in obstacle_ys]
 
-        fig, ax = self.world.show()
-        if len(candidates) > 0:
-           ax.scatter(*zip(*candidates))
-        plt.show()
+        # fig, ax = self.world.show()
+        # if len(candidates) > 0:
+           # ax.scatter(*zip(*candidates))
+        # plt.show()
 
         costs = []
         subgoal_idxs = []

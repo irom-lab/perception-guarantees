@@ -32,7 +32,8 @@ class Zed:
         res.height = 404
 
         tracking_params = sl.PositionalTrackingParameters() #set parameters for Positional Tracking
-        tracking_params.enable_imu_fusion = True 
+        tracking_params.enable_imu_fusion = True
+        tracking_params.mode = 2
         status = self.zed.enable_positional_tracking(tracking_params) #enable Positional Tracking
         if status != sl.ERROR_CODE.SUCCESS:
             print("Enable Positional Tracking : "+repr(status)+". Exit program.")
