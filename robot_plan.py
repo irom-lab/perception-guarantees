@@ -22,19 +22,28 @@ def boxes_to_planner(boxes, sp):
         boxes_new[i,:,:] = np.reshape(np.array([[[0,0,0,-1],[1,0,0,0],[0,-1,0,0],[0,0,1,0]]])@np.reshape(boxes[0],(4,1)),(2,2)) + np.array([sp.world.w/2,0])
     return boxes_new
 
-def get_boxes(sp):
-    # fake random boxes in planner coordinates
-    # replace with camera + 3detr later
-    n = np.random.randint(1,5)
-    boxes = []
-    for i in range(n):
-        x0 = np.random.uniform(0,sp.world.w)
-        y0 = np.random.uniform(2,sp.world.h)
-        x1 = np.random.uniform(0,sp.world.w)
-        y1 = np.random.uniform(2,sp.world.h)
-        boxes.append(np.array([[min(x0,x1),min(y0,y1)],
-                         [max(x0,x1),max(y0,y1)]]))
-    return np.array(boxes)
+def boxes_to_planner_frame(boxes, sp):
+    boxes_new = np.zeros_like(boxes)
+    for i in range(len(boxes)):
+        #boxes_new[i,:,:] = np.reshape(np.array([[[0,0,0,-1],[1,0,0,0],[0,-1,0,0],[0,0,1,0]]])@np.reshape(boxes[0],(4,1)),(2,2)) + np.array([sp.world.w/2,0])
+        boxes_new[i,0,0] = -boxes[i,1,1] + sp.world.w/2
+        boxes_new[i,1,0] = -boxes[i,0,1] + sp.world.w/2
+        boxes_new[i,:,1] =  boxes[i,:,0]
+    return boxes_new
+
+# def get_boxes(sp):
+#     # fake random boxes in planner coordinates
+#     # replace with camera + 3detr later
+#     n = np.random.randint(1,5)
+#     boxes = []
+#     for i in range(n):
+#         x0 = np.random.uniform(0,sp.world.w)
+#         y0 = np.random.uniform(2,sp.world.h)
+#         x1 = np.random.uniform(0,sp.world.w)
+#         y1 = np.random.uniform(2,sp.world.h)
+#         boxes.append(np.array([[min(x0,x1),min(y0,y1)],
+#                          [max(x0,x1),max(y0,y1)]]))
+#     return np.array(boxes)
 
 
 def plan_loop():
@@ -45,13 +54,13 @@ def plan_loop():
     replan = True # set if want to just follow open loop plan
     save_traj = True  # set if want to save trajectory and compare against plan
     plot_traj = True  # set if want to visualize trajectory at the end of execution
-    result_dir = 'results/virtual_obs_zed_replan/' # set to unique trial identifier if saving results
+    result_dir = 'results/3detr_obs_zed_replan/' # set to unique trial identifier if saving results
     goal_forrestal = [7.0, -2.0, 0.0, 0.0] # goal in forrestal coordinates
     reachable_file = 'planning/pre_compute/reachable_uni_2k.pkl'
     pset_file = 'planning/pre_compute/Pset_uni_2k.pkl'
     num_samples = 2000  # number of samples used for the precomputed files
     dt = 0.01 #   planner dt
-    radius = 0.3 # distance between intermediate goals on the frontier
+    radius = 0.1 # distance between intermediate goals on the frontier
     
     # ****************************************************
     if vicon:
@@ -68,7 +77,7 @@ def plan_loop():
     Pset = pickle.load(f)
 
     # initialize planner
-    sp = Safe_Planner(goal_f=goal_forrestal, sensor_dt=1,dt=dt, n_samples=num_samples, radius=radius)
+    sp = Safe_Planner(goal_f=goal_forrestal, sensor_dt=2,dt=dt, n_samples=num_samples, radius=radius)
     print("goal (planner coords)", sp.goal)
     
     # *** Alternate commenting of two lines below if goal changes
@@ -103,10 +112,14 @@ def plan_loop():
 
     # perception + cp
     # boxes = get_boxes(sp)
-    boxes = np.array([[[2.0,4.0],[3.0,6.0]]])
-    boxes[:,0,:] -= cp
-    boxes[:,1,:] += cp
-    
+    # boxes = np.array([[[2.0,4.0],[3.0,6.0]]])
+    # boxes[:,0,:] -= cp
+    # boxes[:,1,:] += cp
+    boxes = go1.camera.get_boxes(0.4, 5)
+    boxes = boxes[:,:,0:2]
+    print("Boxes before planner transform ",  boxes)
+    boxes = boxes_to_planner_frame(boxes, sp)
+    print("Boxes after planner transform ",  boxes)
     # plan
     state = state_to_planner(go1.state, sp)
     start_idx = np.argmin(cdist(np.array(sp.Pset),state))
@@ -116,8 +129,8 @@ def plan_loop():
     if not replan:
         plan_traj.append(res)
 
-    # fig, ax = sp.world.show()
-    # plt.show()
+    fig, ax = sp.world.show()
+    plt.show()
 
     # ****************************************************
     # EXECUTION LOOP
@@ -125,9 +138,9 @@ def plan_loop():
         # perception + cp
         # boxes = get_boxes(sp)
         # boxes = np.array([[[0,0],[0.01,0.01]]])
-        boxes = np.array([[[2.0,4.0],[3.0,6.0]]])
-        boxes[:,0,:] -= cp
-        boxes[:,1,:] += cp
+        # boxes = np.array([[[2.0,4.0],[3.0,6.0]]])
+        # boxes[:,0,:] -= cp
+        # boxes[:,1,:] += cp
         
         if replan:
             # plan
@@ -136,8 +149,15 @@ def plan_loop():
             start_idx = np.argmin(cdist(np.array(sp.Pset),state))
 
             # print(start_idx,Pset[start_idx],state)
+            boxes = go1.camera.get_boxes(0.4, 5)
+            boxes = boxes[:,:,0:2]
+            print("Boxes before planner transform ",  boxes)
+            boxes = boxes_to_planner_frame(boxes, sp)
+            print("Boxes after planner transform ",  boxes)
             res = sp.plan(state, boxes)
             plan_traj.append(res)
+            fig, ax = sp.world.show()
+            plt.show()
 
         # execute
         if len(res[0]) > 1:
