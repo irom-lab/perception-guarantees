@@ -39,7 +39,7 @@ class Go1_move():
             # wait for initial state
             if (self.camera.get_pose()[0] == None):
                 time.sleep(0.5)
-            self.state, self.timestamp = self.get_state()
+            self.state, self.timestamp, self.yaw= self.get_state()
 
         # initialize go1 communication
         HIGHLEVEL = 0xee
@@ -57,6 +57,7 @@ class Go1_move():
         if self.state_type == 'zed':
             pos_state, timestamp, self.yaw = self.camera.get_pose()
             if timestamp != self.timestamp:
+                print("DEBUG: ", self.state, self.timestamp, pos_state, timestamp)
                 vx, vy = self.calc_velocity(self.state[0], self.state[1], self.timestamp, pos_state[0], pos_state[1], timestamp)
                 state = [pos_state[0], pos_state[1], vx, vy]
 
@@ -70,12 +71,12 @@ class Go1_move():
             self.state, self.yaw, timestamp = self.get_true_state()
             self.timestamp = timestamp
         
-        return self.state, timestamp
+        return self.state, timestamp, self.yaw
 
     def get_true_state(self):
         x, y, timestamp = self.vicon_state.x, self.vicon_state.y, self.vicon_state.timestamp
         if timestamp != self.ts_timestamp:
-            vx, vy = self.calc_velocity(self.true_state[0], self.true_state[1], self.ts_timestamp, x, y, timestamp, units='seconds')
+            vx, vy = self.calc_velocity(self.true_state[0], self.true_state[1], self.ts_timestamp, x, y, timestamp, units='microseconds')
             state = [x, y, vx, vy]
             self.ts_yaw = self.vicon_state.yaw
             # update state and timestamp

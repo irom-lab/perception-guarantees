@@ -2,6 +2,24 @@ import pyzed.sl as sl
 import argparse
 from scipy.spatial.transform import Rotation
 import tf
+import time
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.pyplot as plt
+import sys
+sys.path.append('datasets')
+
+import torch
+import torch.nn as nn
+
+from itertools import product, combinations
+from models import build_model
+from datasets.sunrgbd import SunrgbdDatasetConfig as dataset_config
+dataset_config = dataset_config()
+# Mesh IO
+import numpy as np
+from utils.make_args import make_args_parser
+from utils.pc_util import preprocess_point_cloud, pc_to_axis_aligned_rep
+from utils.box_util import box2d_iou
 
 class Zed:
     def __init__(self):
@@ -17,9 +35,26 @@ class Zed:
         init = sl.InitParameters(depth_mode=sl.DEPTH_MODE.NEURAL,
                                 coordinate_units=sl.UNIT.METER,
                                 coordinate_system=sl.COORDINATE_SYSTEM.RIGHT_HANDED_Z_UP_X_FWD,
-                                depth_minimum_distance = 0.15,
-                                depth_maximum_distance = 8)
+                                depth_minimum_distance = 1,
+                                depth_maximum_distance = 5.5)
         self.parse_args(init)
+    
+        
+        parser = make_args_parser()
+        args = parser.parse_args(args=[])
+        # Dataset config: use SUNRGB-D
+        # dataset_config = dataset_config()
+        # Build model
+        self.model, _ = build_model(args, dataset_config)
+
+        # Load pre-trained weights
+        sd = torch.load(args.test_ckpt, map_location=torch.device("cpu")) 
+        self.model.load_state_dict(sd["model"]) 
+
+        self.model = self.model.cuda()
+        self.model.eval()
+
+        self.device = torch.device("cuda")
 
         self.zed = sl.Camera()
         status = self.zed.open(init)
@@ -32,7 +67,8 @@ class Zed:
         res.height = 404
 
         tracking_params = sl.PositionalTrackingParameters() #set parameters for Positional Tracking
-        tracking_params.enable_imu_fusion = True 
+        tracking_params.enable_imu_fusion = True
+        tracking_params.mode = 2
         status = self.zed.enable_positional_tracking(tracking_params) #enable Positional Tracking
         if status != sl.ERROR_CODE.SUCCESS:
             print("Enable Positional Tracking : "+repr(status)+". Exit program.")
@@ -40,9 +76,13 @@ class Zed:
             exit()
 
         self.runtime = sl.RuntimeParameters()
+        self.runtime.measure3D_reference_frame = sl.REFERENCE_FRAME.WORLD
         self.camera_pose = sl.Pose()
         self.py_translation = sl.Translation()
         self.py_orientation = sl.Orientation()
+        # camera + 3DETR
+        self.num_pc_points = 40000
+        self.pc = sl.Mat(res.width, res.height, sl.MAT_TYPE.F32_C4, sl.MEM.CPU)
 
     def get_IMU(self):
         ts_handler = TimestampHandler()
@@ -79,7 +119,8 @@ class Zed:
                 yaw = self.get_yaw_from_quat(q)
                 # euler = tf.transformations.euler_from_quaternion(q)
                 # yaw =  euler[2] # TODO: FIX this. Yaw is definitely wrong
-
+        else:
+            self.get_pose()
         return t_translation, self.camera_pose.timestamp.get_microseconds(), yaw
 
     def get_yaw_from_quat(self, quat):
@@ -89,9 +130,110 @@ class Zed:
 
         return yaw
     
-    def get_pc(self):
+    def get_boxes(self, cp=0.4, num_boxes=10):
         # TODO: add zed related functions for using the pointcloud
-        pass
+        # Get pointcloud
+        # self.zed.retrieve_measure(self.pc, sl.MEASURE.XYZRGBA,sl.MEM.CPU, res)
+
+        # pc = sl.Mat()
+        if self.zed.grab(self.runtime) == sl.ERROR_CODE.SUCCESS:
+            self.zed.retrieve_measure(self.pc,  sl.MEASURE.XYZRGBA, sl.MEM.CPU)
+            # Get pointcloud as a numpy array (remove nan, -inf, +inf and RGB values)
+            points = np.array(self.pc.get_data())
+            #print(np.shape(points), np.min(points), np.max(points))
+            points = points[:,:,0:3]
+            points = points[np.isfinite(points).any(axis=2),: ]
+            points = points[points[:,1]<2,:]
+            # points_temp = np.copy(points)
+            # points[:,2] = points_temp[:,1]
+            # points[:,0] = -points_temp[:,2]
+            # points[:,1] = -points_temp[:,0]
+            # print(np.shape(points), np.min(points), np.max(points))
+            if (len(points[0])>0):
+                batch_size = 1
+                points = np.array(points).astype('float32')
+                # Downsample
+                points_ds = preprocess_point_cloud(points, self.num_pc_points)
+                points_ds = points_ds.reshape((batch_size, self.num_pc_points, 3))
+                pc_all = torch.from_numpy(points_ds).to(self.device)
+                boxes, box_features = self.get_box_from_pc(pc_all, cp, num_boxes, False)
+            else:
+                points = np.zeros((1,self.num_pc_points, 3),dtype='float32')
+                pc_all = torch.from_numpy(points).to(self.device)
+                boxes, box_features = self.get_room_size_box(pc_all)
+        else:
+            points = np.zeros((1,self.num_pc_points, 3),dtype='float32')
+            pc_all = torch.from_numpy(points).to(self.device)
+            boxes, box_features = self.get_room_size_box(pc_all)
+        return boxes
+
+    def get_box_from_pc(self, pc_all, cp, num_boxes, visualize=False):
+        pc_min_all = pc_all.min(1).values
+        pc_max_all = pc_all.max(1).values
+        inputs = {'point_clouds': pc_all, 'point_cloud_dims_min': pc_min_all, 'point_cloud_dims_max': pc_max_all}
+
+        outputs = self.model(inputs)
+        bbox_pred_points = outputs['outputs']['box_corners'].detach().cpu()
+        # print(bbox_pred_points.shape)
+        cls_prob = outputs["outputs"]["sem_cls_prob"].clone().detach().cpu()
+
+        # model_outputs_all["box_corners"][env,batch_inds,:,:] = outputs["outputs"]["box_corners"].detach().cpu()
+        # model_outputs_all["box_features"][env,batch_inds,:,:] = outputs["box_features"].detach().cpu()
+
+        box_features = outputs["box_features"].detach().cpu()
+
+        chair_prob = cls_prob[:,:,3]
+        obj_prob = outputs["outputs"]["objectness_prob"].clone().detach().cpu()
+        sort_box = torch.sort(obj_prob,1,descending=True)
+
+        num_probs = 0
+        boxes = np.zeros((num_boxes, 2,3))
+        if np.any(np.isnan(np.array(bbox_pred_points))):
+            return self.get_room_size_box(pc_all)
+        
+        for (sorted_idx,prob) in zip(list(sort_box[1][0,:]), list(sort_box[0][0,:])):
+            if (num_probs < num_boxes):
+                prob = prob.numpy()
+                bbox = bbox_pred_points[0, sorted_idx, :, :]
+                bb = pc_to_axis_aligned_rep(bbox.numpy())
+                # print(cc)
+                flag = False
+                if num_probs == 0:
+                    boxes[num_probs,:,:] = bb
+                    num_probs +=1
+                else:
+                    for bb_keep in boxes:
+                        bb1 = (bb_keep[0,0],bb_keep[0,1],bb_keep[1,0],bb_keep[1,1])
+                        bb2 = (bb[0,0],bb[0,1],bb[1,0],bb[1,1])
+                        # Non-maximal supression, check if IoU more than some threshold to keep box
+                        if(box2d_iou(bb1,bb2) > 0.1):
+                            flag = True
+                    if not flag:    
+                        boxes[num_probs,:,:] = bb
+                        num_probs +=1
+        boxes[:,0,:] -= cp
+        boxes[:,1,:] += cp
+        return boxes, box_features
+
+    def get_room_size_box(self, pc_all):
+        room_size = 8
+        num_chairs =5
+        boxes = np.zeros((num_chairs, 2,3))
+        # box = torch.tensor(pc_to_axis_aligned_rep(bbox_pred_points.numpy()))
+        boxes[:,0,1] = 0*np.ones_like(boxes[:,0,0])
+        boxes[:,0,0] = (-room_size/2)*np.ones_like(boxes[:,0,1])
+        boxes[:,0,2] = 0*np.ones_like(boxes[:,0,2])
+        boxes[:,1,1] = room_size*np.ones_like(boxes[:,1,0])
+        boxes[:,1,0] = (room_size/2)*np.ones_like(boxes[:,1,1])
+        boxes[:,1,2] = room_size*np.ones_like(boxes[:,1,2])
+
+        pc_min_all = pc_all.min(1).values
+        pc_max_all = pc_all.max(1).values
+        inputs = {'point_clouds': pc_all, 'point_cloud_dims_min': pc_min_all, 'point_cloud_dims_max': pc_max_all}
+
+        outputs = self.model(inputs)
+        box_features = outputs["box_features"].detach().cpu()
+        return boxes, box_features
 
     def parse_args(self, init):
         if len(self.opt.input_svo_file)>0 and self.opt.input_svo_file.endswith(".svo"):

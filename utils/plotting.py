@@ -28,13 +28,16 @@ def plot_trajectories(reses, sp, vicon_traj, state_traj, replan=False, save_fig=
     if len(vicon_traj) > 0:
         # print("vicon length", len(vicon_traj))
         vicon_arr = np.array(vicon_traj)
-        # print("vicon arr", vicon_arr.shape)
-        print(vicon_arr.T.shape)
         vicon_tf = sp.state_to_planner(vicon_arr)
         # print('vicon tf', vicon_tf.shape)
         ax.plot(vicon_tf[0, :], vicon_tf[1, :], c='blue', linewidth=1, label='vicon')
+    if len(state_traj) >0:
+        state_arr = np.array(state_traj)
+        state_tf = sp.state_to_planner(state_arr)
+        # print('vicon tf', vicon_tf.shape)
+        ax.plot(state_tf[0, :], state_tf[1, :], c='c', linewidth=1, label='state')
         if replan:
-            ax.plot(vicon_tf[0,range(0,len(vicon_traj),int(sp.sensor_dt/sp.dt))], vicon_tf[1,range(0,len(vicon_traj),int(sp.sensor_dt/sp.dt))], 'bo',label='replan')
+            ax.plot(state_tf[0,range(0,len(state_traj),int(sp.sensor_dt/sp.dt))], state_tf[1,range(0,len(state_traj),int(sp.sensor_dt/sp.dt))], 'co',label='replan')
     # TODO: add in state_traj
         
     plt.legend()

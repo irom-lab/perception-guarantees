@@ -159,7 +159,7 @@ class Safe_Planner:
                  sensor_dt: float = 1, #time resolution for perception update
                  r = 3, #cost threshold for reachability
                  radius = 0.5, #radius for finding intermediate goals
-                 FoV = 70*np.pi/180, #field of view
+                 FoV = 60*np.pi/180, #field of view
                  FoV_range = 5, #range of field of view
                  FoV_close = 1,
                  n_samples = 2000,
