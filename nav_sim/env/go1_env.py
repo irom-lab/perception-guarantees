@@ -15,6 +15,11 @@ import pickle
 from nav_sim.util.misc import rgba2rgb
 
 [k1, k2, A, B, R, BRB] = pickle.load(open('planning/sp_var.pkl','rb'))
+k3 = A[2,3]
+k4 = A[3,2]
+k5 = B[3,1]
+k6 = B[2,0]
+print("Controller gains, k1", k1, " k2 ", k2, " k3 ", k3, " k4 ", k4, " k5 ", k5, " k6 ", k6)
 
 
 class Go1Env():
@@ -60,7 +65,7 @@ class Go1Env():
         Reset the environment - initialize PyBullet if first time, reset task, reset obstacles, reset robot
         
         Args:
-            task (dict, optional): Task to be reset.
+            task (dict, optional): Task to be resemove_robott.
         """
         # Start PyBullet session if first time - and set obstacle
         if self._physics_client_id < 0:
@@ -167,8 +172,8 @@ class Go1Env():
             )
 
             # Get Image
-            far = 1000.0
-            near = 0.01
+            far = 5.0
+            near = 1.0
             projection_matrix = self._p.computeProjectionMatrixFOV(
                 fov=rgb_cfg.fov, aspect=rgb_cfg.aspect, nearVal=near,
                 farVal=far
@@ -500,11 +505,12 @@ class Go1Env():
         Args:
             state (np.ndarray): State to be reset.
         """
+        yaw = np.pi/2
         if "robot_id" in vars(self).keys():
             self._p.resetBasePositionAndOrientation(
                 self.robot_id,
                 posObj=np.append(state[:2], self.robot_com_height),
-                ornObj=self._p.getQuaternionFromEuler([0, 0, state[2]])
+                ornObj=self._p.getQuaternionFromEuler([0, 0, yaw])
             )
         else:
             robot_visual_id = self._p.createVisualShape(
@@ -516,7 +522,7 @@ class Go1Env():
                 baseVisualShapeIndex=robot_visual_id,
                 basePosition=np.append(state[:2], self.robot_com_height),
                 baseOrientation=self._p.getQuaternionFromEuler([
-                    0, 0, state[2]
+                    0, 0, yaw
                 ])
             )
 
@@ -534,14 +540,16 @@ class Go1Env():
         ux, uy = action
         x_new = x + vx* self.dt
         y_new = y + vy * self.dt
-        vx_new = vx-k1*self.dt*vx+k1*ux*self.dt
-        vy_new = vy-k2*self.dt*vy+k2*uy*self.dt
+        vx_new = vx-k1*self.dt*vx+k5*ux*self.dt -k4*vy*self.dt
+        vy_new = vy-k2*self.dt*vy+k6*uy*self.dt -k3*vx*self.dt
+        print(vx_new, vy_new)
         state = np.array([x_new, y_new, vx_new, vy_new])
+        yaw = np.pi/2
 
         # Update visual
         self._p.resetBasePositionAndOrientation(
             self.robot_id, posObj=np.append(state[:2], self.robot_com_height),
-            ornObj=self._p.getQuaternionFromEuler([0, 0, state[2]])
+            ornObj=self._p.getQuaternionFromEuler([0, 0, yaw])
         )
         return state, action
 
