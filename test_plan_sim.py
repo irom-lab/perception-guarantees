@@ -55,7 +55,7 @@ task.furniture.piece_1 = {
             nav_sim_path,
             'asset/sample_furniture/00a91a81-fc73-4625-8298-06ecd55b6aaa/raw_model.obj'
         ),
-    'position': [6, 4.5, 0.0],
+    'position': [6, 3.5, 0.0],
     'yaw': 0
 }
 piece1 = trimesh.load(
@@ -121,7 +121,7 @@ f = open('planning/Pset_10Hz.pkl', 'rb')
 Pset = pickle.load(f)
 
 # initialize planner
-sp = Safe_Planner(init_state=task.init_state, FoV=60*np.pi/180, n_samples=2000,dt=0.1)
+sp = Safe_Planner(init_state=task.init_state, FoV=60*np.pi/180, n_samples=2000,dt=0.1,radius = 0.1)
 sp.load_reachable(Pset, reachable)
 
 # %%
@@ -285,7 +285,7 @@ def get_room_size_box(self, pc_all):
 
 # %%
 t = 0
-cp = 0.4
+cp = 0.6
 observation = env.step([0,0])[0] # initial observation
 steps_taken = 0
 while True:
@@ -296,7 +296,7 @@ while True:
     boxes[:,1,:] += cp
 
     res = sp.plan(state, boxes)
-    if (steps_taken % 10) == 0 :
+    if (steps_taken % 100) == 0 :
         # sp.show_connection(res[0]) 
         sp.world.free_space
         sp.show(res[0], true_boxes=np.array(ground_truth))

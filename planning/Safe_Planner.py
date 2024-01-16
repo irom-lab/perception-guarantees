@@ -47,16 +47,16 @@ class Ray:
                 x = x1
                 x_coords = np.array([x.coords.xy[0][0],x.coords.xy[1][0]])
                 if np.all(abs(self.start-x_coords)<buffer):
-                    self.start_box = geom.boundary
+                    self.start_box = geom.exterior
                 elif np.all(abs(self.end-x_coords)<buffer):
-                    self.end_box = geom.boundary
+                    self.end_box = geom.exterior
             if not x2.is_empty:
                 x = x2
                 x_coords = np.array([x.coords.xy[0][0],x.coords.xy[1][0]])
                 if np.all(abs(self.start-x_coords)<buffer):
-                    self.start_box = geom.boundary
+                    self.start_box = geom.exterior
                 elif np.all(abs(self.end-x_coords)<buffer):
-                    self.end_box = geom.boundary
+                    self.end_box = geom.exterior
 
 class World:
     def __init__(self, world_box):
