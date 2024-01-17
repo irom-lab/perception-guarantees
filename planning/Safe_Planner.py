@@ -25,35 +25,38 @@ class Ray:
         self.start = vert[0]
         self.end = vert[1]
         self.angle = angle
-    def find_box(self, geoms, frontier, world):
         self.start_box = LineString([[0,0],[0,0]])
         self.end_box = LineString([[0,0],[0,0]])
+    def find_box(self, geoms, frontier, world):
+        # self.start_box = LineString([[0,0],[0,0]])
+        # self.end_box = LineString([[0,0],[0,0]])
         ab = LineString(frontier[self.angle])
         x = ab.intersection(world)
+        buffer = 1e-4
         if not x.is_empty:
             self.end_box = world
         for geom in geoms:
-            geom_buff = geom.buffer(2e-5)
+            geom_buff = geom.buffer(buffer)
             # if np.linalg.norm(self.start-self.end) > 1e-5:
             #     x = ab.intersection(geom_buff)
             # else:
             x1 = ab.intersection(geom)
             x2 = ab.intersection(geom_buff)
-
+            print("x1 type: ", x1.geom_type, x1.is_empty, " x2 type: ", x2.geom_type, x2.is_empty)
             if not x1.is_empty:
                 x = x1
                 x_coords = np.array([x.coords.xy[0][0],x.coords.xy[1][0]])
-                if np.all(abs(self.start-x_coords)<2e-5):
-                    self.start_box = geom.boundary
-                elif np.all(abs(self.end-x_coords)<2e-5):
-                    self.end_box = geom.boundary
+                if np.all(abs(self.start-x_coords)<buffer):
+                    self.start_box = geom.exterior
+                elif np.all(abs(self.end-x_coords)<buffer):
+                    self.end_box = geom.exterior
             if not x2.is_empty:
                 x = x2
                 x_coords = np.array([x.coords.xy[0][0],x.coords.xy[1][0]])
-                if np.all(abs(self.start-x_coords)<2e-5):
-                    self.start_box = geom.boundary
-                elif np.all(abs(self.end-x_coords)<2e-5):
-                    self.end_box = geom.boundary
+                if np.all(abs(self.start-x_coords)<buffer):
+                    self.start_box = geom.exterior
+                elif np.all(abs(self.end-x_coords)<buffer):
+                    self.end_box = geom.exterior
 
 class World:
     def __init__(self, world_box):
@@ -94,12 +97,13 @@ class World:
     def isICSfree(self, state):
         '''Check for inevitable collision set'''
         # TODO: measure and update empirically
-        x_brake = state[2]/k1
-        y_brake = state[3]/k2
-        new_state = np.array([state[0]+x_brake, state[1]+y_brake,0,0])
-        if self.isValid(new_state):
-            return True
-        return False
+        # x_brake = state[2]/k1
+        # y_brake = state[3]/k2
+        # new_state = np.array([state[0]+x_brake, state[1]+y_brake,0,0])
+        # if self.isValid(new_state):
+        #     return True
+        # return False
+        return True
 
     def show(self, true_boxes = None):
         '''Plot occupied space'''
@@ -164,7 +168,7 @@ class Safe_Planner:
                  FoV_close = 1,
                  n_samples = 2000,
                  max_search_iter = 1000,
-                 weight = 10, #weight for cost to go
+                 weight = 5, #weight for cost to go
                  seed = 0):
         # load inputs
 
@@ -486,10 +490,11 @@ class Safe_Planner:
         # occlusion
         if self.world.occ_space.contains(Point(state[0,0],state[0,1])) == False:
             self.world.free_space_new = self.occlusion(state)
-            self.world.free_space_new = self.world.free_space_new.difference(tooclose)
-            if self.world.free_space_new is not None and self.world.free_space_new.is_valid:
-                self.world.free_space = self.world.free_space.union(self.world.free_space_new)
-                self.world.free_space.simplify(1e-5)
+            if self.world.free_space_new is not None:
+                self.world.free_space_new = self.world.free_space_new.difference(tooclose)
+                if self.world.free_space_new.is_valid:
+                    self.world.free_space = self.world.free_space.union(self.world.free_space_new)
+                    self.world.free_space.simplify(1e-5)
         if self.world.free_space.geom_type == 'GeometryCollection':
             self.world.free_space = MultiPolygon([geom for geom in self.world.free_space.geoms if geom.geom_type == 'Polygon'])
         
@@ -526,6 +531,7 @@ class Safe_Planner:
                 goal_loc = self.goal_inter(start_idx)
                 if goal_loc is None or self.goal_idx == self.n_samples:
                     goal_flag = -1
+                    idx_solution=[self.goal_idx]
                     print('planning failed, stay')
                     break
                 else:

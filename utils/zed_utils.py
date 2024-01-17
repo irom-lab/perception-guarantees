@@ -22,7 +22,7 @@ from utils.pc_util import preprocess_point_cloud, pc_to_axis_aligned_rep
 from utils.box_util import box2d_iou
 
 class Zed:
-    def __init__(self):
+    def __init__(self,state_ic=[0.0,0.0,0.0,0.0], yaw_ic=0.0):
         # init camera
         parser = argparse.ArgumentParser()
         parser.add_argument('--input_svo_file', type=str, help='Path to an .svo file, if you want to replay it',default = '')
@@ -66,7 +66,17 @@ class Zed:
         res.width = 720
         res.height = 404
 
+        initial_position = sl.Transform()
+        # Set the initial position of the Camera Frame at vicon initial  above the World Frame
+        initial_translation = sl.Translation()
+        initial_rotation = sl.Rotation()
+        initial_translation.init_vector(state_ic[0], state_ic[1], 0.42)
+        initial_rotation.set_euler_angles(0,0,yaw_ic)
+        initial_position.set_translation(initial_translation)
+        initial_position.set_euler_angles(0,0,yaw_ic)
+
         tracking_params = sl.PositionalTrackingParameters() #set parameters for Positional Tracking
+        tracking_params.set_initial_world_transform(initial_position)
         tracking_params.enable_imu_fusion = True
         tracking_params.mode = 2
         status = self.zed.enable_positional_tracking(tracking_params) #enable Positional Tracking
@@ -99,28 +109,36 @@ class Zed:
     def get_pose(self):
         t_translation = 0.0
         yaw = 0.0
-        if self.zed.grab(self.runtime) == sl.ERROR_CODE.SUCCESS:
-            tracking_state = self.zed.get_position(self.camera_pose,sl.REFERENCE_FRAME.WORLD) #Get the position of the camera in a fixed reference frame (the World Frame)
-            if tracking_state == sl.POSITIONAL_TRACKING_STATE.OK:
-                #Get rotation and translation and displays it
-                rotation = self.camera_pose.get_rotation_vector()
-                translation = self.camera_pose.get_translation(self.py_translation)
-                t_translation = [round(translation.get()[0], 2), round(translation.get()[1], 2), round(translation.get()[2], 2)]
-                pose_data = self.camera_pose.pose_data(sl.Transform())
-                # print(t_translation, self.camera_pose.timestamp.get_microseconds())
+        is_success = (self.zed.grab(self.runtime) == sl.ERROR_CODE.SUCCESS)
+        while not is_success:
+            is_success =self.zed.grab(self.runtime) == sl.ERROR_CODE.SUCCESS
+            print("DEBUG: No success in grabbing :(")
+        tracking_state = self.zed.get_position(self.camera_pose,sl.REFERENCE_FRAME.WORLD) #Get the position of the camera in a fixed reference frame (the World Frame)
+        is_tracking = tracking_state == sl.POSITIONAL_TRACKING_STATE.OK
+        # while not is_tracking:
+        #     is_tracking = tracking_state == sl.POSITIONAL_TRACKING_STATE.OK
+        #     print("DEBUG: No success in tracking :(")
+        #Get rotation and translation and displays it
+        rotation = self.camera_pose.get_rotation_vector()
+        translation = self.camera_pose.get_translation(self.py_translation)
+        t_translation = [round(translation.get()[0], 2), round(translation.get()[1], 2), round(translation.get()[2], 2)]
+        pose_data = self.camera_pose.pose_data(sl.Transform())
+        # print(t_translation, self.camera_pose.timestamp.get_microseconds())
+
+        #Orientation quaternion
+        ox = round(self.camera_pose.get_orientation(self.py_orientation).get()[0], 3)
+        oy = round(self.camera_pose.get_orientation(self.py_orientation).get()[1], 3)
+        oz = round(self.camera_pose.get_orientation(self.py_orientation).get()[2], 3)
+        ow = round(self.camera_pose.get_orientation(self.py_orientation).get()[3], 3)
+        q = [ox, oy, oz, ow]
         
-                #Orientation quaternion
-                ox = round(self.camera_pose.get_orientation(self.py_orientation).get()[0], 3)
-                oy = round(self.camera_pose.get_orientation(self.py_orientation).get()[1], 3)
-                oz = round(self.camera_pose.get_orientation(self.py_orientation).get()[2], 3)
-                ow = round(self.camera_pose.get_orientation(self.py_orientation).get()[3], 3)
-                q = [ox, oy, oz, ow]
-                
-                yaw = self.get_yaw_from_quat(q)
+        yaw = self.get_yaw_from_quat(q)
                 # euler = tf.transformations.euler_from_quaternion(q)
                 # yaw =  euler[2] # TODO: FIX this. Yaw is definitely wrong
-        else:
-            self.get_pose()
+            # else:
+                # self.get_pose()
+        # else:
+            # self.get_pose()
         return t_translation, self.camera_pose.timestamp.get_microseconds(), yaw
 
     def get_yaw_from_quat(self, quat):
@@ -143,7 +161,7 @@ class Zed:
             #print(np.shape(points), np.min(points), np.max(points))
             points = points[:,:,0:3]
             points = points[np.isfinite(points).any(axis=2),: ]
-            points = points[points[:,1]<2,:]
+            points = points[points[:,2]<2,:]
             # points_temp = np.copy(points)
             # points[:,2] = points_temp[:,1]
             # points[:,0] = -points_temp[:,2]

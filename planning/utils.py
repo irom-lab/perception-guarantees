@@ -316,7 +316,11 @@ def find_frontier(xbar_now, world_box, start, FoV, polygon=False):
         # for this ray, look at each box
         for box, vertices in box_vertices.items():
             # edges =np.array([[vertices[i],vertices[(i+1)%4]] for i in range(4)])
-            b = xbar_now.geoms[box].boundary.coords
+            print("X_bar now (utils/find_frontier): ", xbar_now.geoms[box].geom_type)
+            if xbar_now.geoms[box].geom_type != 'Polygon':
+                continue
+            # b = xbar_now.geoms[box].boundary.coords
+            b = xbar_now.geoms[box].exterior.coords
             edges = [LineString(b[k:k+2]) for k in range(len(b) - 1)]
             if np.any(abs(vertices - vertex)<1e-5): # same box
                 # make sure ray doesn't intersect with its own box
@@ -449,6 +453,7 @@ def find_polygon(ray_objects, world):
     for i in range(len(ray_objects)-1):
         ray1 = ray_objects[i]
         ray2 = ray_objects[i+1]
+        print(ray1.start_box, ray1.end_box, ray2.start_box, ray2.end_box, 'box finding in utils/find_polygon')
         
         if ray1.end_box == ray2.end_box and (ray1.start_box != ray2.start_box or
                                              ray1.start_box == ray2.start_box == LineString([[0,0],[0,0]])):
