@@ -316,7 +316,7 @@ def find_frontier(xbar_now, world_box, start, FoV, polygon=False):
         # for this ray, look at each box
         for box, vertices in box_vertices.items():
             # edges =np.array([[vertices[i],vertices[(i+1)%4]] for i in range(4)])
-            b = xbar_now.geoms[box].boundary.coords
+            b = xbar_now.geoms[box].exterior.coords
             edges = [LineString(b[k:k+2]) for k in range(len(b) - 1)]
             if np.any(abs(vertices - vertex)<1e-5): # same box
                 # make sure ray doesn't intersect with its own box
