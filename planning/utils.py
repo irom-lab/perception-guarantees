@@ -181,7 +181,7 @@ def filter_reachable(state: np.ndarray, state_set: list, r, vx_range, vy_range, 
                         traj_set_filtered.append((x,u))
                     else:
                         rip += 1
-    print('rip',rip)
+    # print('rip',rip)
     return state_set_filtered, cost_set_filtered, time_set_filtered, traj_set_filtered
 
 
@@ -224,7 +224,7 @@ def gen_path(s0, s1, dt):
     dx, dy = s1[0] - s0[0], s1[1] - s0[1]
     yaw = np.arctan2(dy, dx)
     d = np.hypot(dx, dy)
-    print(d,dx)
+    # print(d,dx)
     steps = np.arange(0, d, dt).reshape(-1, 1)
     pts = s0[0:2] + steps * np.array([np.cos(yaw), np.sin(yaw)])
     return np.vstack((pts, s1[0:2]))
@@ -316,6 +316,10 @@ def find_frontier(xbar_now, world_box, start, FoV, polygon=False):
         # for this ray, look at each box
         for box, vertices in box_vertices.items():
             # edges =np.array([[vertices[i],vertices[(i+1)%4]] for i in range(4)])
+            # print("X_bar now (utils/find_frontier): ", xbar_now.geoms[box].geom_type)
+            if xbar_now.geoms[box].geom_type != 'Polygon':
+                continue
+            # b = xbar_now.geoms[box].boundary.coords
             b = xbar_now.geoms[box].exterior.coords
             edges = [LineString(b[k:k+2]) for k in range(len(b) - 1)]
             if np.any(abs(vertices - vertex)<1e-5): # same box
@@ -449,7 +453,7 @@ def find_polygon(ray_objects, world):
     for i in range(len(ray_objects)-1):
         ray1 = ray_objects[i]
         ray2 = ray_objects[i+1]
-        print(ray1.start_box, ray1.end_box, ray2.start_box, ray2.end_box, 'box finding in utils/find_polygon')
+        # print(ray1.start_box, ray1.end_box, ray2.start_box, ray2.end_box, 'box finding in utils/find_polygon')
         
         if ray1.end_box == ray2.end_box and (ray1.start_box != ray2.start_box or
                                              ray1.start_box == ray2.start_box == LineString([[0,0],[0,0]])):

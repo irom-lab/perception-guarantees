@@ -239,7 +239,7 @@ class Safe_Planner:
         # pre-compute reachable sets
         @ray.remote # speed up
         def compute_reachable(node_idx):
-            print(node_idx)
+            # print(node_idx)
             node = self.Pset[node_idx]
             fset, fdist, ftime, ftraj = filter_reachable(node,self.Pset,self.r,self.vx_range,self.vy_range, 'F', self.dt)
             bset, bdist, btime, btraj = filter_reachable(node,self.Pset,self.r,self.vx_range,self.vy_range, 'B', self.dt)

@@ -59,11 +59,11 @@ class Go1_move():
         if self.state_type == 'zed':
             pos_state, timestamp, self.yaw = self.camera.get_pose()
             if timestamp != self.timestamp:
-                print("DEBUG: ", self.state, self.timestamp, pos_state, timestamp)
+                # print("DEBUG: ", self.state, self.timestamp, pos_state, timestamp)
                 vx, vy = self.calc_velocity(self.state[0], self.state[1], self.timestamp, pos_state[0], pos_state[1], timestamp)
                 state = [pos_state[0], pos_state[1], vx, vy]
 
-                print("zed YAW", self.yaw)
+                # print("zed YAW", self.yaw)
 
                 # update state and timestamp
                 self.state = state
@@ -160,7 +160,7 @@ class GroundTruthBB():
 
 
     def get_true_bb(self):
-        padding = 0.5
+        padding = 0.34
         bb_list = []
         for num in self.chair_numbers:
             x, y = self.chair_states[num].x, self.chair_states[num].y
