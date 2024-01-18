@@ -42,7 +42,7 @@ class Ray:
             # else:
             x1 = ab.intersection(geom)
             x2 = ab.intersection(geom_buff)
-            print("x1 type: ", x1.geom_type, x1.is_empty, " x2 type: ", x2.geom_type, x2.is_empty)
+            # print("x1 type: ", x1.geom_type, x1.is_empty, " x2 type: ", x2.geom_type, x2.is_empty)
             if not x1.is_empty:
                 x = x1
                 x_coords = np.array([x.coords.xy[0][0],x.coords.xy[1][0]])
@@ -249,7 +249,7 @@ class Safe_Planner:
         # pre-compute reachable sets
         @ray.remote # speed up
         def compute_reachable(node_idx):
-            print(node_idx)
+            # print(node_idx)
             node = self.Pset[node_idx]
             fset, fdist, ftime, ftraj = filter_reachable(node,self.Pset,self.r,self.vx_range,self.vy_range, 'F', self.dt)
             bset, bdist, btime, btraj = filter_reachable(node,self.Pset,self.r,self.vx_range,self.vy_range, 'B', self.dt)

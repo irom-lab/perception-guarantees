@@ -2,9 +2,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
-def plot_trajectories(reses, sp, vicon_traj, state_traj, replan=False, save_fig=False, filename=None): #executed_traj):
+def plot_trajectories(reses, sp, vicon_traj, state_traj, ground_truth=None, replan=False, save_fig=False, filename=None): #executed_traj):
     '''Plot solution'''
-    fig, ax = sp.world.show()
+    fig, ax = sp.world.show(true_boxes=ground_truth)
     plt.gca().set_aspect('equal', adjustable='box')
     if replan:
         color=['r','y','g','k','m']
