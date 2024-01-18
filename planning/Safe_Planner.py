@@ -27,8 +27,12 @@ class Ray:
         buffer = 2e-5 
         self.start_box = LineString([[0,0],[0,0]])
         self.end_box = LineString([[0,0],[0,0]])
+    def find_box(self, geoms, frontier, world):
+        # self.start_box = LineString([[0,0],[0,0]])
+        # self.end_box = LineString([[0,0],[0,0]])
         ab = LineString(frontier[self.angle])
         x = ab.intersection(world)
+        buffer = 1e-4
         if not x.is_empty:
             self.end_box = world
         for geom in geoms:
@@ -36,7 +40,7 @@ class Ray:
 
             x1 = ab.intersection(geom)
             x2 = ab.intersection(geom_buff)
-
+            print("x1 type: ", x1.geom_type, x1.is_empty, " x2 type: ", x2.geom_type, x2.is_empty)
             if not x1.is_empty:
                 x_coords = np.array([x1.coords.xy[0][0],x1.coords.xy[1][0]])
                 if np.all(abs(self.start-x_coords)<buffer):
@@ -159,7 +163,7 @@ class Safe_Planner:
                  FoV_close = 1,
                  n_samples = 2000,
                  max_search_iter = 1000,
-                 weight = 10, #weight for cost to go
+                 weight = 5, #weight for cost to go
                  seed = 0):
         # load inputs
 

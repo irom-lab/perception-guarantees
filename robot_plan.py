@@ -56,16 +56,19 @@ def plan_loop():
     plot_traj = True  # set if want to visualize trajectory at the end of execution
     result_dir = 'results/3detr_obs_zed_replan/' # set to unique trial identifier if saving results
     goal_forrestal = [7.0, -2.0, 0.0, 0.0] # goal in forrestal coordinates
-    reachable_file = 'planning/pre_compute/reachable_uni_2k.pkl'
-    pset_file = 'planning/pre_compute/Pset_uni_2k.pkl'
+    reachable_file = 'planning/pre_compute/reachable_10Hz.pkl'
+    pset_file = 'planning/pre_compute/Pset_10Hz.pkl'
     num_samples = 2000  # number of samples used for the precomputed files
-    dt = 0.01 #   planner dt
+    dt = 0.1 #   planner dt
     radius = 0.1 # distance between intermediate goals on the frontier
-    
+    chairs = [2, 3]  # list of chair labels to be used to get ground truth bounding boxes
     # ****************************************************
     if vicon:
         rospy.init_node('listener', anonymous=True)
+        chair_states = GroundTruthBB(chairs)
+        time.sleep(3)
         
+ 
     vicon_traj = []
     state_traj = []
     plan_traj = []
@@ -77,7 +80,7 @@ def plan_loop():
     Pset = pickle.load(f)
 
     # initialize planner
-    sp = Safe_Planner(goal_f=goal_forrestal, sensor_dt=2,dt=dt, n_samples=num_samples, radius=radius)
+    sp = Safe_Planner(goal_f=goal_forrestal, sensor_dt=3,dt=dt, n_samples=num_samples, radius=radius)
     print("goal (planner coords)", sp.goal)
     
     # *** Alternate commenting of two lines below if goal changes
@@ -89,6 +92,9 @@ def plan_loop():
     print(go1.state)
     # time.sleep(2)
     time.sleep(dt)
+    chair_states_bb = chair_states.get_true_bb()
+    ground_truth = boxes_to_planner_frame(chair_states_bb, sp)
+    print("ground truth", ground_truth, ground_truth.shape)
     
     # ****************************************************
     # QUICK MOTION/STATE DEBUG CODE. Comment out planning
@@ -115,7 +121,7 @@ def plan_loop():
     # boxes = np.array([[[2.0,4.0],[3.0,6.0]]])
     # boxes[:,0,:] -= cp
     # boxes[:,1,:] += cp
-    boxes = go1.camera.get_boxes(0.4, 5)
+    boxes = go1.camera.get_boxes(0.5, 5)
     boxes = boxes[:,:,0:2]
     print("Boxes before planner transform ",  boxes)
     boxes = boxes_to_planner_frame(boxes, sp)
@@ -129,8 +135,8 @@ def plan_loop():
     if not replan:
         plan_traj.append(res)
 
-    fig, ax = sp.world.show()
-    plt.show()
+    # fig, ax = sp.world.show()
+    # plt.show()
 
     # ****************************************************
     # EXECUTION LOOP
@@ -141,7 +147,8 @@ def plan_loop():
         # boxes = np.array([[[2.0,4.0],[3.0,6.0]]])
         # boxes[:,0,:] -= cp
         # boxes[:,1,:] += cp
-        
+
+
         if replan:
             # plan
             gs, _, yaw = go1.get_state()
@@ -149,14 +156,14 @@ def plan_loop():
             start_idx = np.argmin(cdist(np.array(sp.Pset),state))
 
             # print(start_idx,Pset[start_idx],state)
-            boxes = go1.camera.get_boxes(0.4, 5)
+            boxes = go1.camera.get_boxes(0.5, 5)
             boxes = boxes[:,:,0:2]
-            print("Boxes before planner transform ",  boxes)
+            # print("Boxes before planner transform ",  boxes)
             boxes = boxes_to_planner_frame(boxes, sp)
-            print("Boxes after planner transform ",  boxes)
+            # print("Boxes after planner transform ",  boxes)
             res = sp.plan(state, boxes)
             plan_traj.append(res)
-            fig, ax = sp.world.show()
+            sp.show(res[0], true_boxes=ground_truth)
             plt.show()
 
         # execute
@@ -188,9 +195,11 @@ def plan_loop():
                 if vicon:
                     vicon_state, vicon_yaw, vicon_ts = go1.get_true_state()
                     vicon_traj.append(vicon_state)
+                    print("VICON state: ", vicon_state, " yaw", vicon_yaw)
                 if time_adjust==0:
                     state, ts,yaw = go1.get_state()
                     state_traj.append(state)
+                    print("ZED state: ", state, " yaw", yaw)
                 et = time.time()
                 print("Time taken ", et-st )
                 if (sp.dt-et+st+time_adjust) >0:
@@ -207,13 +216,14 @@ def plan_loop():
             if go1.check_goal():
                 break
         else:
+            plan_traj.pop()
+            print("BREAK 1")
             for step in range(int(sp.sensor_dt/sp.dt)):
-                print("BREAK 1")
                 action = [0,0]
                 go1.move(action)
-                time.sleep(sp.sensor_dt)
-                t += sp.sensor_dt
-        if t > 15:
+                time.sleep(sp.dt)
+                t += sp.dt
+        if t > 25:
             # time safety break
             print("BREAK 2")
             break

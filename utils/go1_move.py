@@ -22,6 +22,8 @@ class Go1_move():
         # initialize states
         if vicon:
             self.vicon_state = ViconStateListener("vicon/strelka/strelka", "x") 
+            self.chair1_state = ViconStateListener("vicon/chair_1/chair_1", "x") 
+            self.chair2_state = ViconStateListener("vicon/chair_2/chair_2", "x") 
             # self.vicon_state = ViconStateListener("vicon/cobs_alec/cobs_alec", "x") 
 
             # wait for initial state read
@@ -35,7 +37,7 @@ class Go1_move():
 
         if self.state_type == 'zed':
             # initialize Zed 
-            self.camera = Zed()
+            self.camera = Zed(state_ic=self.true_state, yaw_ic=self.ts_yaw)
             # wait for initial state
             if (self.camera.get_pose()[0] == None):
                 time.sleep(0.5)
@@ -82,9 +84,17 @@ class Go1_move():
             # update state and timestamp
             self.true_state = state
             self.ts_timestamp = timestamp
-
-            print("vicon YAW", self.ts_yaw)
         return self.true_state, self.ts_yaw, timestamp
+
+    def get_true_bb(self):
+        # c1x, c1y = self.chair1_state.x, self.chair1_state.y
+        c2x, c2y = self.chair2_state.x, self.chair2_state.y
+        # bb1 = [[c1x-0.5, c1y-0.5], [c1x+0.5, c1y+0.5]]
+        bb2 = [[c2x-0.5, c2y-0.5], [c2x+0.5, c2y+0.5]]
+        bb = []
+        # bb.append(bb1)
+        bb.append(bb2)
+        return np.array(bb)
     
     def calc_velocity(self, x1, y1, t1, x2, y2, t2, units='microseconds'):
         if units == 'microseconds':
@@ -98,7 +108,7 @@ class Go1_move():
         return vx, vy
 
     def check_goal(self):
-        if (np.abs(self.state[0] - self.goal[0]) < 0.2) and (np.abs(self.state[1] - self.goal[1]) < 0.2):
+        if (np.abs(self.state[0] - self.goal[0]) < 0.5) and (np.abs(self.state[1] - self.goal[1]) < 0.5):
             print("AT GOAL! :)")
             self.stop()
 
@@ -138,8 +148,40 @@ class Go1_move():
         self.udp.Send()
 
 
+class GroundTruthBB():
+    def __init__(self, chair_nums=[]):
+            self.chair_numbers = chair_nums
+            self.chair_states = {}
+
+            if len(self.chair_numbers) > 0:
+                for num in self.chair_numbers:
+                    topic_name = "vicon/chair_" + str(num) + "/chair_" + str(num)
+                    self.chair_states[num] = ViconStateListener(topic_name, "x")
 
 
-        
+    def get_true_bb(self):
+        padding = 0.5
+        bb_list = []
+        for num in self.chair_numbers:
+            x, y = self.chair_states[num].x, self.chair_states[num].y
+            if (np.abs(x) < 0.001) and (np.abs(y) < 0.001):
+                continue
 
+            bb = [[x - padding, y - padding], [x + padding, y + padding]] 
+            bb_list.append(bb)
 
+        return np.array(bb_list)
+
+        # # c1x, c1y = self.chair1_state.x, self.chair1_state.y
+        # c2x, c2y = self.chair2_state.x, self.chair2_state.y
+        # # bb1 = [[c1x-0.5, c1y-0.5], [c1x+0.5, c1y+0.5]]
+        # bb2 = [[c2x-0.5, c2y-0.5], [c2x+0.5, c2y+0.5]]
+        # bb = []
+        # # bb.append(bb1)
+        # bb.append(bb2)
+        # return np.array(bb)
+    
+
+    def project_bb(self):
+        # TODO: use markers to get bb in x-y plane
+        pass
