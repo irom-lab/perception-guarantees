@@ -148,8 +148,40 @@ class Go1_move():
         self.udp.Send()
 
 
+class GroundTruthBB():
+    def __init__(self, chair_nums=[]):
+            self.chair_numbers = chair_nums
+            self.chair_states = {}
+
+            if len(self.chair_numbers) > 0:
+                for num in self.chair_numbers:
+                    topic_name = "vicon/chair_" + str(num) + "/chair_" + str(num)
+                    self.chair_states[num] = ViconStateListener(topic_name, "x")
 
 
-        
+    def get_true_bb(self):
+        padding = 0.5
+        bb_list = []
+        for num in self.chair_numbers:
+            x, y = self.chair_states[num].x, self.chair_states[num].y
+            if (np.abs(x) < 0.001) and (np.abs(y) < 0.001):
+                continue
 
+            bb = [[x - padding, y - padding], [x + padding, y + padding]] 
+            bb_list.append(bb)
 
+        return np.array(bb_list)
+
+        # # c1x, c1y = self.chair1_state.x, self.chair1_state.y
+        # c2x, c2y = self.chair2_state.x, self.chair2_state.y
+        # # bb1 = [[c1x-0.5, c1y-0.5], [c1x+0.5, c1y+0.5]]
+        # bb2 = [[c2x-0.5, c2y-0.5], [c2x+0.5, c2y+0.5]]
+        # bb = []
+        # # bb.append(bb1)
+        # bb.append(bb2)
+        # return np.array(bb)
+    
+
+    def project_bb(self):
+        # TODO: use markers to get bb in x-y plane
+        pass

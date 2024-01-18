@@ -61,11 +61,14 @@ def plan_loop():
     num_samples = 2000  # number of samples used for the precomputed files
     dt = 0.1 #   planner dt
     radius = 0.1 # distance between intermediate goals on the frontier
-    
+    chairs = [2, 3]  # list of chair labels to be used to get ground truth bounding boxes
     # ****************************************************
     if vicon:
         rospy.init_node('listener', anonymous=True)
+        chair_states = GroundTruthBB(chairs)
+        time.sleep(3)
         
+ 
     vicon_traj = []
     state_traj = []
     plan_traj = []
@@ -89,7 +92,8 @@ def plan_loop():
     print(go1.state)
     # time.sleep(2)
     time.sleep(dt)
-    ground_truth = boxes_to_planner_frame(go1.get_true_bb(),sp)
+    chair_states_bb = chair_states.get_true_bb()
+    ground_truth = boxes_to_planner_frame(chair_states_bb, sp)
     print("ground truth", ground_truth, ground_truth.shape)
     
     # ****************************************************
@@ -143,7 +147,8 @@ def plan_loop():
         # boxes = np.array([[[2.0,4.0],[3.0,6.0]]])
         # boxes[:,0,:] -= cp
         # boxes[:,1,:] += cp
-        
+
+
         if replan:
             # plan
             gs, _, yaw = go1.get_state()
