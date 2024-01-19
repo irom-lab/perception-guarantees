@@ -1,20 +1,18 @@
 import numpy as np
 from scipy.spatial.distance import cdist
 from scipy.stats import rankdata
+from scipy.linalg import expm
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
 import time as tm
 import pickle
-import concurrent.futures
-
 
 from shapely.geometry import Point, MultiPolygon, Polygon, LineString, MultiPoint
 from shapely.ops import unary_union
 from shapely.geometry.polygon import orient
 from shapely.validation import make_valid
-
 from planning.utils import turn_box, non_det_filter, filter_reachable, show_trajectory, find_frontier, find_candidates, gen_trajectory, gen_path, trace_polygon, find_polygon
 
 [k1, k2, A, B, R, BRB] = pickle.load(open('planning/sp_var.pkl','rb'))
@@ -25,39 +23,32 @@ class Ray:
         self.start = vert[0]
         self.end = vert[1]
         self.angle = angle
+    def find_box(self, geoms, frontier, world):
+        buffer = 2e-5 
         self.start_box = LineString([[0,0],[0,0]])
         self.end_box = LineString([[0,0],[0,0]])
-    def find_box(self, geoms, frontier, world):
-        # self.start_box = LineString([[0,0],[0,0]])
-        # self.end_box = LineString([[0,0],[0,0]])
         ab = LineString(frontier[self.angle])
         x = ab.intersection(world)
-        buffer = 1e-4
         if not x.is_empty:
             self.end_box = world
         for geom in geoms:
             geom_buff = geom.buffer(buffer)
-            # if np.linalg.norm(self.start-self.end) > 1e-5:
-            #     x = ab.intersection(geom_buff)
-            # else:
+
             x1 = ab.intersection(geom)
             x2 = ab.intersection(geom_buff)
-            print("x1 type: ", x1.geom_type, x1.is_empty, " x2 type: ", x2.geom_type, x2.is_empty)
             if not x1.is_empty:
-                x = x1
-                x_coords = np.array([x.coords.xy[0][0],x.coords.xy[1][0]])
+                x_coords = np.array([x1.coords.xy[0][0],x1.coords.xy[1][0]])
                 if np.all(abs(self.start-x_coords)<buffer):
                     self.start_box = geom.exterior
                 elif np.all(abs(self.end-x_coords)<buffer):
                     self.end_box = geom.exterior
-            if not x2.is_empty:
-                x = x2
-                x_coords = np.array([x.coords.xy[0][0],x.coords.xy[1][0]])
+            elif not x2.is_empty:
+                x_coords = np.array([x2.coords.xy[0][0],x2.coords.xy[1][0]])
                 if np.all(abs(self.start-x_coords)<buffer):
                     self.start_box = geom.exterior
                 elif np.all(abs(self.end-x_coords)<buffer):
                     self.end_box = geom.exterior
-
+            
 class World:
     def __init__(self, world_box):
         self.w = world_box[1,0] - world_box[0,0]
@@ -69,17 +60,17 @@ class World:
 
     def update(self, new_boxes):
         '''Applies nondeterministic filter to update estimate of occupancy space'''
-        new_occ_space = np.array(new_boxes)
-        if self.counter == 0:
-            self.box_space = unary_union(turn_box(new_boxes[0:-1]))
-        else:
-            self.box_space = non_det_filter(self.box_space, new_occ_space)
+        # new_occ_space = np.array(new_boxes)
+        # if self.counter == 0:
+        #     self.box_space = unary_union(turn_box(new_boxes[0:-1]))
+        # else:
+        #     self.box_space = non_det_filter(self.box_space, new_occ_space)
         self.occ_space = unary_union(turn_box(new_boxes))
 
         if self.occ_space.geom_type == 'Polygon':
             self.occ_space = MultiPolygon([self.occ_space])
-        if self.box_space.geom_type == 'Polygon':
-            self.box_space = MultiPolygon([self.box_space])
+        # if self.box_space.geom_type == 'Polygon':
+        #     self.box_space = MultiPolygon([self.box_space])
 
         self.occ_space.simplify(1e-5)
         self.occ_space = MultiPolygon([orient(s, sign=-1.0) for s in self.occ_space.geoms if s.geom_type == 'Polygon'])
@@ -97,13 +88,12 @@ class World:
     def isICSfree(self, state):
         '''Check for inevitable collision set'''
         # TODO: measure and update empirically
-        # x_brake = state[2]/k1
-        # y_brake = state[3]/k2
-        # new_state = np.array([state[0]+x_brake, state[1]+y_brake,0,0])
-        # if self.isValid(new_state):
-        #     return True
-        # return False
-        return True
+        # x_brake = 0.12512712
+        # y_brake = 0.1972604
+        new_state = expm(A*10**3)@state
+        if self.isValid(new_state):
+            return True
+        return False
 
     def show(self, true_boxes = None):
         '''Plot occupied space'''
@@ -249,7 +239,7 @@ class Safe_Planner:
         # pre-compute reachable sets
         @ray.remote # speed up
         def compute_reachable(node_idx):
-            print(node_idx)
+            # print(node_idx)
             node = self.Pset[node_idx]
             fset, fdist, ftime, ftraj = filter_reachable(node,self.Pset,self.r,self.vx_range,self.vy_range, 'F', self.dt)
             bset, bdist, btime, btraj = filter_reachable(node,self.Pset,self.r,self.vx_range,self.vy_range, 'B', self.dt)
@@ -367,7 +357,6 @@ class Safe_Planner:
         frontier = find_frontier(self.world.occ_space, self.world_box, start, self.FoV)
         rays = list(frontier.keys())
         rays.sort()
-
         ray_objects = []
         for ray in rays:
             ray_object = Ray(ray,frontier[ray])
@@ -492,7 +481,7 @@ class Safe_Planner:
             self.world.free_space_new = self.occlusion(state)
             if self.world.free_space_new is not None:
                 self.world.free_space_new = self.world.free_space_new.difference(tooclose)
-                if self.world.free_space_new.is_valid:
+                if self.world.free_space_new.is_valid:            
                     self.world.free_space = self.world.free_space.union(self.world.free_space_new)
                     self.world.free_space.simplify(1e-5)
         if self.world.free_space.geom_type == 'GeometryCollection':
@@ -511,7 +500,7 @@ class Safe_Planner:
 
         # check collision
         point_objects = MultiPoint(np.array(self.Pset)[:,0:2])
-        self.bool_valid = self.world.free_space.buffer(1e-5).contains(point_objects.geoms)
+        self.bool_valid = self.world.free_space.contains(point_objects.geoms)
 
         # finds nearest valid sampled node to current state
         start_idx_all = np.argsort(cdist(np.array(self.Pset),np.array(state)), axis=0)
@@ -531,7 +520,7 @@ class Safe_Planner:
                 goal_loc = self.goal_inter(start_idx)
                 if goal_loc is None or self.goal_idx == self.n_samples:
                     goal_flag = -1
-                    idx_solution=[self.goal_idx]
+                    idx_solution = [self.goal_idx]
                     print('planning failed, stay')
                     break
                 else:
@@ -597,10 +586,8 @@ class Safe_Planner:
             idxset_near = list(set(R_plus) & set(idxset_unvisit)) # X_near <- R+(z) \cap W
 
             # for x in X_near
-
             for idx_near in idxset_near:
                 # Y_near <- R-(x) \cap H
-                now = tm.time()
                 R_minus = self.reachable[idx_near][2]
                 idxset_cand = list(set(R_minus[0]) & set(idxset_open)) #index in Pset
                 idxset_inR = np.where(np.isin(R_minus[0], idxset_cand))[0]
@@ -610,8 +597,8 @@ class Safe_Planner:
 
                 if len(idxset_cand) == 0:
                     continue
-                # ymin <- argmin cost(y) + dist(y,x)
 
+                # ymin <- argmin cost(y) + dist(y,x)
                 idx_incand_costmin = np.argmin(self.cost[idxset_cand] + distset_cand) #index in cand set
                 cost_new = min(self.cost[idxset_cand] + distset_cand)
                 time_new = timeset_cand[idx_incand_costmin]
@@ -619,21 +606,15 @@ class Safe_Planner:
                 idx_nearinparentfset = self.reachable[idx_parent][1][0].index(idx_near)
                 x_waypoints = self.reachable[idx_parent][1][3][idx_nearinparentfset][0]
 
-                # now2 = tm.time()
-                col = 0
                 # check trajectory is collision-free
                 if self.world.isValid_multiple(x_waypoints):
                     # check ICS before sensor update
-                    # now3 = tm.time()
-                    # print(now3-now2)
                     if (self.time_to_come[idx_parent] + time_new <= self.sensor_dt
                         and self.world.isICSfree(self.Pset[idx_near])):
                         self.connect(idx_near,cost_new,time_new,idx_parent)
                     elif self.time_to_come[idx_parent] + time_new > self.sensor_dt:
                         self.connect(idx_near,cost_new,time_new,idx_parent)
-                else:
-                    col += 1
-                # print('collision', col, len(idxset_near))
+                    self.connect(idx_near,cost_new,time_new,idx_parent)
 
             self.bool_open[idx_lowest] = False
             self.bool_closed[idx_lowest] = True
