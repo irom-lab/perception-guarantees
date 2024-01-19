@@ -65,12 +65,20 @@ device = torch.device("cuda")
 model.to(device)
 
 # Load the x,y points to sample
-with open('data/Pset_1k_cost5.pkl', 'rb') as f:
+with open('planning/Pset_10Hz.pkl', 'rb') as f:
     samples = pickle.load(f)
-x = [sample[1] for sample in samples]
-y = [sample[0]-4 for sample in samples]
+    # Remove goal
+    samples = samples[:-1][:]
+# Remove duplicates
+sample_proj = [[sample[0], sample[1]] for sample in samples]
+s = []
+s = [x for x in sample_proj if x not in s and not s.append(x)]
+# Transform from planner frame
+x = [sample[1] for sample in s]
+y = [sample[0]-4 for sample in s]
 
 num_steps = len(x)
+# print("Num steps: ", num_steps)
 
 # Load params from json file
 with open("env_params.json", "r") as read_file:
@@ -248,7 +256,7 @@ def get_box(pc_all):
     sort_box = torch.sort(chair_prob,1,descending=True)
 
     num_probs = 0
-    num_boxes = 15
+    num_boxes = 10
     corners = np.zeros((num_boxes, 2,3))
     if np.any(np.isnan(np.array(bbox_pred_points))):
         return get_room_size_box(pc_all)
@@ -360,6 +368,23 @@ def format_results(results):
         bboxes_ground_truth_aligned[env,:,:,:] = torch.from_numpy(results[env]["bbox_labels"])
     return model_outputs_all, bboxes_ground_truth_aligned, loss_mask
 
+def combine_old_files(filenames, num_files, num_envs_per_file):
+    model_outputs_all = {"box_features": torch.tensor([]), "box_axis_aligned": torch.tensor([])}
+    bboxes_ground_truth_aligned = torch.tensor([])
+    loss_mask = torch.tensor([])
+    for i in range(num_files):
+        features = torch.load(filenames[0]+str(i+1) + ".pt")
+        bboxes = torch.load(filenames[1]+str(i+1) + ".pt")
+        loss = torch.load(filenames[2]+str(i+1) + ".pt")
+        model_outputs_all["box_features"] = torch.cat((model_outputs_all["box_features"], features["box_features"]))
+        # model_outputs_all["box_features"][(i)*num_envs_per_file:(i+1)*num_envs_per_file,:,:,:] =torch.clone(features["box_features"][(i)*num_envs_per_file:(i+1)*num_envs_per_file,:,:,:])
+        model_outputs_all["box_axis_aligned"] = torch.cat((model_outputs_all["box_axis_aligned"], features["box_axis_aligned"]))
+        bboxes_ground_truth_aligned= torch.cat((bboxes_ground_truth_aligned, bboxes))
+        loss_mask = torch.cat((loss_mask, loss))
+        print(model_outputs_all["box_features"].size(), model_outputs_all["box_axis_aligned"].size(), bboxes_ground_truth_aligned.size(), loss_mask.size())
+        print("saved data shape: ",features["box_features"].size(), loss.size())
+    return model_outputs_all, bboxes_ground_truth_aligned, loss_mask
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -423,7 +448,7 @@ if __name__ == '__main__':
     num_envs = 100
 
     # Number of parallel threads
-    num_parallel = 5
+    num_parallel = 10
     ##################################################################
 
     # _, _, _ = render_env(seed=0)
@@ -439,7 +464,7 @@ if __name__ == '__main__':
         # save_tasks += [task]
         env += 1 
         if env%batch_size == 0 and env >0:
-            if env>0: # In case code stops running, change starting environment to last batch saved
+            if env>500: # In case code stops running, change starting environment to last batch saved
                 batch = math.floor(env/batch_size)
                 print("Saving batch", str(batch))
                 t_start = time.time()
@@ -456,9 +481,9 @@ if __name__ == '__main__':
                 print("Time to generate results: ", t_end - t_start)
                 ###########################################################################
                 model_outputs_all, bboxes_ground_truth_aligned, loss_mask = format_results(results)
-                torch.save(model_outputs_all, "data/dataset_intermediate/features_prior"+str(batch) + ".pt")
-                torch.save(bboxes_ground_truth_aligned, "data/dataset_intermediate/bbox_labels_prior"+str(batch) + ".pt")
-                torch.save(loss_mask, "data/dataset_intermediate/loss_mask_prior"+str(batch) + ".pt")
+                torch.save(model_outputs_all, "data/dataset_intermediate/features"+str(batch) + ".pt")
+                torch.save(bboxes_ground_truth_aligned, "data/dataset_intermediate/bbox_labels"+str(batch) + ".pt")
+                torch.save(loss_mask, "data/dataset_intermediate/loss_mask"+str(batch) + ".pt")
 
                 # ii = 0
                 # for result in results.get():
@@ -472,12 +497,14 @@ if __name__ == '__main__':
             # save_tasks = []
     #################################################################
 
-    model_outputs_all, bboxes_ground_truth_aligned, loss_mask = format_results(save_res)
+    # model_outputs_all, bboxes_ground_truth_aligned, loss_mask = format_results(save_res)
+    filenames = ["data/dataset_intermediate/features", "data/dataset_intermediate/bbox_labels", "data/dataset_intermediate/loss_mask"]
+    model_outputs_all, bboxes_ground_truth_aligned, loss_mask = combine_old_files(filenames, 40, 10)
     ###########################################################################
     # # Save processed feature data
-    torch.save(model_outputs_all, "data/features_prior.pt")
+    torch.save(model_outputs_all, "data/features.pt")
     # # Save ground truth bounding boxes
-    torch.save(bboxes_ground_truth_aligned, "data/bbox_labels_prior.pt")
+    torch.save(bboxes_ground_truth_aligned, "data/bbox_labels.pt")
     # # Save loss mask
-    torch.save(loss_mask, "data/loss_mask_prior.pt")
+    torch.save(loss_mask, "data/loss_mask.pt")
     ###########################################################################

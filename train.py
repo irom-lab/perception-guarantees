@@ -32,9 +32,9 @@ def main(raw_args=None):
 
 	###################################################################
 	# Initialize dataset and dataloader
-	dataset = PointCloudDataset("data/features_prior.pt", "data/bbox_labels_prior.pt", "data/loss_mask_prior.pt")
+	dataset = PointCloudDataset("data/features.pt", "data/bbox_labels.pt", "data/loss_mask.pt")
 	prior_dataset = PointCloudDataset("data/features_test_old.pt", "data/bbox_labels_test_old.pt", "data/loss_mask_test_old.pt")
-	test_dataset = PointCloudDataset("data/features_old.pt", "data/bbox_labels_old.pt", "data/loss_mask_old.pt")
+	test_dataset = PointCloudDataset("data/features_test.pt", "data/bbox_labels_test.pt", "data/loss_mask_test.pt")
 	batch_size = 100 #100
 	N=len(dataset)
 	N_obj = dataset.bbox_labels.shape[2]
@@ -76,50 +76,50 @@ def main(raw_args=None):
 	w2 = torch.tensor(0.1).to(device) #0.1
 	w3 = torch.tensor(0.1).to(device) #1
 
-	# Run the finetuning  loop
-	print("Finetuning")
-	num_epochs = 100 # 1000
-	for epoch in range(0, num_epochs):
+	# # Run the finetuning  loop
+	# print("Finetuning")
+	# num_epochs = 100 # 1000
+	# for epoch in range(0, num_epochs):
 
-		# Initialize running losses for this epoch
-		current_loss = 0.0
-		current_loss_true = 0.0
-		num_batches = 0
-		for i, data in enumerate(dataloader_prior, 0):
+	# 	# Initialize running losses for this epoch
+	# 	current_loss = 0.0
+	# 	current_loss_true = 0.0
+	# 	num_batches = 0
+	# 	for i, data in enumerate(dataloader_prior, 0):
 
-			# Get inputs, targets, loss mask
-			inputs, targets, loss_mask = data
-			inputs = inputs.to(device)
-			boxes_3detr = targets["bboxes_3detr"].to(device)
-			boxes_gt = targets["bboxes_gt"].to(device)
-			loss_mask = loss_mask.to(device)
+	# 		# Get inputs, targets, loss mask
+	# 		inputs, targets, loss_mask = data
+	# 		inputs = inputs.to(device)
+	# 		boxes_3detr = targets["bboxes_3detr"].to(device)
+	# 		boxes_gt = targets["bboxes_gt"].to(device)
+	# 		loss_mask = loss_mask.to(device)
 
-			# Perform forward pass
-			outputs = model_cp(inputs)
-			# Compute loss
-			loss = box_loss_diff_jit(outputs + boxes_3detr, boxes_gt, w1, w2, w3, loss_mask)
+	# 		# Perform forward pass
+	# 		outputs = model_cp(inputs)
+	# 		# Compute loss
+	# 		loss = box_loss_diff_jit(outputs + boxes_3detr, boxes_gt, w1, w2, w3, loss_mask)
 
-			# Compute true (boolean) version of loss for this batch
-			loss_true, not_enclosed = box_loss_true(outputs + boxes_3detr, boxes_gt, loss_mask, 0.01)
+	# 		# Compute true (boolean) version of loss for this batch
+	# 		loss_true, not_enclosed = box_loss_true(outputs + boxes_3detr, boxes_gt, loss_mask, 0.01)
 
-			# Zero the gradients
-			optimizer_cp.zero_grad()
+	# 		# Zero the gradients
+	# 		optimizer_cp.zero_grad()
 
-			# Perform backward pass
-			loss.backward()
+	# 		# Perform backward pass
+	# 		loss.backward()
 
-			# Perform optimization
-			optimizer_cp.step()
-			# Update current loss for this epoch (summing across batches)
-			current_loss += loss.item()
-			current_loss_true += loss_true.item()
-			num_batches += 1
-		# Print losses (averaged across batches in this epoch)
-		print_interval = 1
-		if verbose and (epoch % print_interval == 0):
-			print("epoch: ", epoch, "; loss: ", '{:02.6f}'.format(current_loss/num_batches),
-				  "; loss true: ", '{:02.6f}'.format(current_loss_true / num_batches), end='\r')
-		###################################################################
+	# 		# Perform optimization
+	# 		optimizer_cp.step()
+	# 		# Update current loss for this epoch (summing across batches)
+	# 		current_loss += loss.item()
+	# 		current_loss_true += loss_true.item()
+	# 		num_batches += 1
+	# 	# Print losses (averaged across batches in this epoch)
+	# 	print_interval = 1
+	# 	if verbose and (epoch % print_interval == 0):
+	# 		print("epoch: ", epoch, "; loss: ", '{:02.6f}'.format(current_loss/num_batches),
+	# 			  "; loss true: ", '{:02.6f}'.format(current_loss_true / num_batches), end='\r')
+	# 	###################################################################
 
 
 	###################################################################
@@ -131,10 +131,11 @@ def main(raw_args=None):
 		boxes_3detr = targets["bboxes_3detr"].to(device)
 		boxes_gt = targets["bboxes_gt"].to(device)
 		loss_mask = loss_mask.to(device)
-		# prior.init_xi()
-		outputs = model_cp(inputs)
-		scaling_cp = scale_prediction(boxes_3detr+outputs, boxes_gt, loss_mask, 0.885) #for coverage of 0.95 w.p. 0.99 
+		# outputs = model_cp(inputs)
+		scaling_cp = scale_prediction(boxes_3detr, boxes_gt, loss_mask, 0.885) #for coverage of 0.95 w.p. 0.99 
+		average_cp = scale_prediction_average(boxes_3detr, boxes_gt, loss_mask, 0.885)
 		print('CP quantile prediction', scaling_cp)
+		print('CP quantile prediction (average)', average_cp)
 	###################################################################
 	###################################################################
 
@@ -455,8 +456,8 @@ def main(raw_args=None):
 		boxes_cp = torch.zeros_like(boxes_3detr)
 		# prior.init_xi()
 		output_cp = model_cp(inputs)
-		boxes_finetune = boxes_3detr + output_cp
-		# boxes_finetune = boxes_3detr
+		# boxes_finetune = boxes_3detr + output_cp
+		boxes_finetune = boxes_3detr
 		boxes_cp[:,:,:,0,:][:,:,None,:] = torch.min(boxes_finetune[:, :, :, 0, :][:,:,None,:], boxes_finetune[:, :, :, 1, :][:,:,None,:]) - scaling_cp
 		boxes_cp[:,:,:,1,:][:,:,None,:] = torch.max(boxes_finetune[:, :, :, 0, :][:,:,None,:], boxes_finetune[:, :, :, 1, :][:,:,None,:])+ scaling_cp
 		# print("CP: ", boxes_cp)
