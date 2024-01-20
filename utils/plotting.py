@@ -29,12 +29,14 @@ def plot_trajectories(reses, sp, vicon_traj, state_traj, ground_truth=None, repl
         # print("vicon length", len(vicon_traj))
         vicon_arr = np.array(vicon_traj)
         vicon_tf = sp.state_to_planner(vicon_arr)
-        # print('vicon tf', vicon_tf.shape)
+        print('vicon tf', vicon_tf.shape)
         ax.plot(vicon_tf[0, :], vicon_tf[1, :], c='blue', linewidth=1, label='vicon')
     if len(state_traj) >0:
-        state_arr = np.array(state_traj)
-        state_tf = sp.state_to_planner(state_arr)
-        # print('vicon tf', vicon_tf.shape)
+        # state_arr = np.array(state_traj)
+        state_tf = np.squeeze(np.array(state_traj)).T
+
+        # state_tf = sp.state_to_planner(state_arr)
+        print('state tf', state_tf.shape)
         ax.plot(state_tf[0, :], state_tf[1, :], c='c', linewidth=1, label='state')
         if replan:
             ax.plot(state_tf[0,range(0,len(state_traj),int(sp.sensor_dt/sp.dt))], state_tf[1,range(0,len(state_traj),int(sp.sensor_dt/sp.dt))], 'co',label='replan')
