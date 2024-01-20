@@ -162,6 +162,7 @@ class Zed:
             points = points[:,:,0:3]
             points = points[np.isfinite(points).any(axis=2),: ]
             points = points[points[:,2]<2,:]
+
             # points_temp = np.copy(points)
             # points[:,2] = points_temp[:,1]
             # points[:,0] = -points_temp[:,2]
