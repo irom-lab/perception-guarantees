@@ -89,7 +89,28 @@ piece2.apply_transform([
         ])
 gt2 = piece2.bounds
 ground_truth.append([[task.furniture.piece_2.position[0]+gt2[0,0],  task.furniture.piece_2.position[1]+gt2[0,1]], [task.furniture.piece_2.position[0]+gt2[1,0],  task.furniture.piece_2.position[1]+gt2[1,1]]])
-print(ground_truth)
+
+task.furniture.piece_3 = {
+    'path':
+        os.path.join(
+            nav_sim_path,
+            'asset/sample_furniture/59e52283-361c-4b98-93e9-0abf42686924/raw_model.obj'
+        ),
+    'position': [2, 2, 0.0],
+    'yaw': -np.pi / 2
+}
+piece3 = trimesh.load(
+                os.path.join(nav_sim_path,'asset/sample_furniture/59e52283-361c-4b98-93e9-0abf42686924/raw_model.obj')
+            )
+piece3.apply_transform([
+            [1, 0, 0, 0],
+            [0, 0, -1, 0],
+            [0, 1, 0, 0],
+            [0, 0, 0, 1],
+        ])
+gt3 = piece3.bounds
+ground_truth.append([[task.furniture.piece_3.position[0]+gt3[0,0],  task.furniture.piece_3.position[1]+gt3[0,1]], [task.furniture.piece_3.position[0]+gt3[1,0],  task.furniture.piece_3.position[1]+gt3[1,1]]])
+# print(ground_truth)
 #
 task.observation = {}
 task.observation.type = 'rgb'  # 'rgb' or 'lidar'
@@ -285,18 +306,20 @@ def get_room_size_box(self, pc_all):
 
 # %%
 t = 0
-cp = 0.6
+robot_radius = 0.3
+cp = 0.73 + robot_radius
 observation = env.step([0,0])[0] # initial observation
 steps_taken = 0
 while True:
     state = np.array([env._state])
+    # print(state)
     boxes = get_box(observation)
-    print(boxes)
+    # print(boxes)
     boxes[:,0,:] -= cp
     boxes[:,1,:] += cp
 
     res = sp.plan(state, boxes)
-    if (steps_taken % 100) == 0 :
+    if (steps_taken % 10) == 0 :
         # sp.show_connection(res[0]) 
         sp.world.free_space
         sp.show(res[0], true_boxes=np.array(ground_truth))

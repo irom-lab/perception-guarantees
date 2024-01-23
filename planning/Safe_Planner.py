@@ -113,8 +113,10 @@ class World:
             if self.free_space_new.geom_type == 'Polygon':
                 xs, ys = self.free_space_new.exterior.xy
                 ax.fill(xs,ys, edgecolor = 'k', linestyle='--', fc = (0,0,0,0))
+            elif self.free_space_new.geom_type == 'LineString':
+                print('plotting problem:', self.free_space_new.geom_type)
             else:
-                for geom in self.free_space.geoms:
+                for geom in self.free_space_new.geoms:
                     if geom.geom_type == 'Polygon':
                         xs, ys = geom.exterior.xy
                         ax.fill(xs,ys, edgecolor = 'k', linestyle='--', fc = (0,0,0,0))
@@ -158,7 +160,7 @@ class Safe_Planner:
                  FoV_close = 1,
                  n_samples = 2000,
                  max_search_iter = 1000,
-                 weight = 5, #weight for cost to go
+                 weight = 10,  #5, #weight for cost to go
                  seed = 0):
         # load inputs
 
@@ -521,11 +523,11 @@ class Safe_Planner:
                 if goal_loc is None or self.goal_idx == self.n_samples:
                     goal_flag = -1
                     idx_solution = [self.goal_idx]
-                    print('planning failed, stay')
+                    # print('planning failed, stay')
                     break
                 else:
                     self.goal_explored.append(self.Pset[self.goal_idx][0:2])
-                    print('intermediate goal: ', self.Pset[self.goal_idx])
+                    # print('intermediate goal: ', self.Pset[self.goal_idx])
 
                     if self.bool_unvisit[self.goal_idx]==False:
                         idx_solution, _ = self.solve(start_idx)
@@ -543,7 +545,7 @@ class Safe_Planner:
             u_waypoints.append(u_waypoint)
 
         end = tm.time()
-        print('planning time: ', end-start)
+        # print('planning time: ', end-start)
         return idx_solution, x_waypoints, u_waypoints
 
     def build_tree(self, start_idx):

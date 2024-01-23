@@ -18,16 +18,17 @@ import pickle
 from omegaconf import OmegaConf
 from shutil import rmtree, copyfile
 import random
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt 
 
-from nav_sim.asset.util import rect_distance, slice_mesh, state_lin_to_bin, get_neighbor, get_grid_cells_btw
+from nav_sim.asset.util import rect_distance, slice_mesh, state_lin_to_bin, get_neighbor, get_grid_cells_btw, state_bin_to_lin
+import IPython as ipy
 
 
 def process_mesh(category_all, task_id, args):
     max_init_goal_attempt = 2000
     max_obs_attempt = 2000
     grid_pitch = 0.10
-    free_init_radius = int((0.75) / grid_pitch)
+    free_init_radius = int(1 / grid_pitch)
     free_goal_radius = int((0.75) / grid_pitch)
     min_init_goal_grid = int(args.min_init_goal_dist / grid_pitch)
 
@@ -83,10 +84,10 @@ def process_mesh(category_all, task_id, args):
         [0, 0, 1, room_height / 2],
         [0, 0, 0, 1],
     ]
-    front_wall = trimesh.creation.box(
-        [0.1, args.room_dim + 0.2, room_height + 0.2],
-        front_wall_transform_matrix,
-    )
+    # front_wall = trimesh.creation.box(
+    #     [0.1, args.room_dim + 0.2, room_height + 0.2],
+    #     front_wall_transform_matrix,
+    # )
     back_wall_transform_matrix = [
         [1, 0, 0, -0.05],
         [0, 1, 0, 0],
@@ -111,7 +112,7 @@ def process_mesh(category_all, task_id, args):
         floor,
         left_wall,
         right_wall,
-        front_wall,
+        # front_wall,
         back_wall,
     ])
     # room.show()
@@ -189,6 +190,19 @@ def process_mesh(category_all, task_id, args):
                     overlap = True
                     break
 
+            ############################################################
+            start_at = [0.2, -1]
+            go_to  =[7,-2]
+            # ipy.embed()
+            if (np.abs(x_pos - start_at[0]) < (2+(piece_x_dim / 2))):
+                if( np.abs(y_pos - start_at[1]) < (1+(piece_y_dim / 2))):
+                    overlap =  True  # Obstacle too close to initial condition
+                    continue
+            if (np.abs(x_pos - go_to[0]) < 1+(piece_x_dim / 2) and  np.abs(y_pos - go_to[1]) < 1+(piece_y_dim / 2)):
+                overlap =  True  # Obstacle too close to goal state
+                continue
+            ############################################################
+
             # Check gap to walls
             # wall_bounds = [
             #     left_wall.bounds, right_wall.bounds, front_wall.bounds,
@@ -235,7 +249,7 @@ def process_mesh(category_all, task_id, args):
         return 0
     room_voxels_2d = np.max(room_voxels.matrix, axis=2)
     room_voxels_2d[1, :] = 1  # fill in gaps in wall
-    room_voxels_2d[-2, :] = 1
+    # room_voxels_2d[-2, :] = 1
     room_voxels_2d[:, 1] = 1
     room_voxels_2d[:, -2] = 1
     # room_voxels.show()
@@ -252,6 +266,7 @@ def process_mesh(category_all, task_id, args):
         goal_state = np.random.choice(free_states)
         init_state_bin = state_lin_to_bin(init_state, [N, M])
         goal_state_bin = state_lin_to_bin(goal_state, [N, M])
+        # ipy.embed()
 
         # Check if too close to obstacles
         init_neighbor = get_neighbor(
@@ -281,6 +296,25 @@ def process_mesh(category_all, task_id, args):
     if init_goal_attempt == max_init_goal_attempt:
         # print('no init/goal found')
         return 0
+    
+
+    ############################################################
+    # init_state = [
+    #     room_voxels.origin[0] + init_state_bin[0] * grid_pitch,
+    #     room_voxels.origin[1] + init_state_bin[1] * grid_pitch,
+    #     random.uniform(0, 2 * np.pi),
+    # ]
+    # goal_loc = [
+    #     room_voxels.origin[0] + goal_state_bin[0] * grid_pitch,
+    #     room_voxels.origin[1] + goal_state_bin[1] * grid_pitch,
+    # ]
+
+    init_state = state_bin_to_lin([3,31], [N, M]) # [0.2, -1]
+    goal_state = state_bin_to_lin([71,21], [N, M]) # [7,-2]
+    init_state_bin = state_lin_to_bin(init_state, [N, M])
+    goal_state_bin = state_lin_to_bin(goal_state, [N, M])
+    ############################################################
+
     init_state = [
         room_voxels.origin[0] + init_state_bin[0] * grid_pitch,
         room_voxels.origin[1] + init_state_bin[1] * grid_pitch,
@@ -290,6 +324,7 @@ def process_mesh(category_all, task_id, args):
         room_voxels.origin[0] + goal_state_bin[0] * grid_pitch,
         room_voxels.origin[1] + goal_state_bin[1] * grid_pitch,
     ]
+
 
     # Sample yaw
     yaw_range = np.pi / 3
@@ -305,7 +340,7 @@ def process_mesh(category_all, task_id, args):
     # Export wall meshes - do not use texture for now since we do not use RGB for training
     wall_path = os.path.join(save_path, 'wall.obj')
     wall = trimesh.util.concatenate([
-        ceiling, left_wall, right_wall, front_wall, back_wall
+        ceiling, left_wall, right_wall, back_wall , #front_wall
     ])
     wall.export(wall_path)
     floor_path = os.path.join(save_path, 'floor.obj')
@@ -340,6 +375,11 @@ def process_mesh(category_all, task_id, args):
     task.goal_loc = [float(v) for v in goal_loc]
     task.piece_id_all = piece_id_all
     task.piece_pos_all = piece_pos_all
+    # print(piece_saved_bounds, len(piece_saved_bounds))
+    piece_bounds_list = [(np.resize(piece_saved_bounds[i],6)) for i in range(len(piece_saved_bounds))]
+    piece_bounds_list = [[float(piece_bounds_list[i][j]) for j in range(len(piece_bounds_list[i]))] for i in range(len(piece_bounds_list))]
+    # print(type(piece_pos_all[0]), type(piece_bounds_list[0]))
+    task.piece_bounds_all = piece_bounds_list
 
     # Pickle task
     with open(save_path + '/task.pkl', 'wb') as outfile:
@@ -390,7 +430,7 @@ if __name__ == "__main__":
         '--min_init_goal_dist', default=7, nargs='?',
         help='min distance between init position and goal'
     )
-    parser.add_argument('--seed', default=42, nargs='?', help='random seed')
+    parser.add_argument('--seed', default=33, nargs='?', help='random seed')
     args = parser.parse_args()
 
     # cfg

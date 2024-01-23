@@ -28,7 +28,7 @@ def main(args):
         save_tasks += [task]
 
     # Shuffle tasks
-    random.shuffle(save_tasks)
+    # random.shuffle(save_tasks)
 
     # Save
     with open(args.save_path, 'wb') as f:
