@@ -20,6 +20,10 @@ import numpy as np
 from utils.make_args import make_args_parser
 from utils.pc_util import preprocess_point_cloud, pc_to_axis_aligned_rep
 from utils.box_util import box2d_iou
+from models.model_perception import MLPModelDet
+
+import IPython as ipy
+
 
 class Zed:
     def __init__(self,state_ic=[0.0,0.0,0.0,0.0], yaw_ic=0.0):
@@ -70,7 +74,7 @@ class Zed:
         # Set the initial position of the Camera Frame at vicon initial  above the World Frame
         initial_translation = sl.Translation()
         initial_rotation = sl.Rotation()
-        initial_translation.init_vector(state_ic[0], state_ic[1], 0.42)
+        initial_translation.init_vector(state_ic[0]+0.14, state_ic[1], 0.42) # 0.14 is x dist from vicon center, 0.42 is height of robot
         initial_rotation.set_euler_angles(0,0,yaw_ic)
         initial_position.set_translation(initial_translation)
         initial_position.set_euler_angles(0,0,yaw_ic)
@@ -93,6 +97,12 @@ class Zed:
         # camera + 3DETR
         self.num_pc_points = 40000
         self.pc = sl.Mat(res.width, res.height, sl.MAT_TYPE.F32_C4, sl.MEM.CPU)
+        num_in = 32768
+        num_out = (5, 2,3) # bbox corner representation
+        self.model_cp = MLPModelDet(num_in, num_out)
+        self.model_cp.to(self.device)
+        # self.model_cp = torch.load('perception_model_finetune')
+        self.model_cp.load_state_dict(torch.load("perception_model_finetune"))
 
     def get_IMU(self):
         ts_handler = TimestampHandler()
@@ -147,13 +157,70 @@ class Zed:
         yaw = rot.as_euler('xyz', degrees=False)[2]
 
         return yaw
-    
+
     def get_boxes(self, cp=0.4, num_boxes=10):
+        # Get pointcloud
+        # self.zed.retrieve_measure(self.pc, sl.MEASURE.XYZRGBA,sl.MEM.CPU, res)
+
+        # pc = sl.Mat()
+        # print("CP: ", cp)
+        if self.zed.grab(self.runtime) == sl.ERROR_CODE.SUCCESS:
+            self.zed.retrieve_measure(self.pc,  sl.MEASURE.XYZRGBA, sl.MEM.CPU)
+            # Get pointcloud as a numpy array (remove nan, -inf, +inf and RGB values)
+            points_ = np.array(self.pc.get_data())
+            #print(np.shape(points), np.min(points), np.max(points))
+            points_ = points_[:,:,0:3]
+            points_ = points_[np.isfinite(points_).any(axis=2),: ]
+            points_ = points_[points_[:,2]<2,:]
+
+            # points_ = points_.T
+
+            # convert points to 3detr frame
+            points = np.copy(points_)
+            points[:,1] = points_[:,0]
+            points[:,0] = -points_[:,1]
+
+            # points_temp = np.copy(points)
+            # points[:,2] = points_temp[:,1]
+            # points[:,0] = -points_temp[:,2]
+            # points[:,1] = -points_temp[:,0]
+            # print(np.shape(points), np.min(points), np.max(points))
+            if (len(points[0])>0):
+                batch_size = 1
+                points = np.array(points).astype('float32')
+                # Downsample
+                points_ds = preprocess_point_cloud(points, self.num_pc_points)
+                points_ds = points_ds.reshape((batch_size, self.num_pc_points, 3))
+                pc_all = torch.from_numpy(points_ds).to(self.device)
+                boxes, box_features = self.get_box_from_pc(pc_all, cp, num_boxes, False)
+            else:
+                points = np.zeros((1,self.num_pc_points, 3),dtype='float32')
+                pc_all = torch.from_numpy(points).to(self.device)
+                boxes, box_features = self.get_room_size_box(pc_all)
+        else:
+            points = np.zeros((1,self.num_pc_points, 3),dtype='float32')
+            pc_all = torch.from_numpy(points).to(self.device)
+            boxes, box_features = self.get_room_size_box(pc_all)
+
+
+        # # print("BOXES SHAPE", boxes.shape)
+        # convert back to forrestal coords
+        boxes_ = np.zeros((len(boxes),2,2))
+        for i in range(len(boxes)):
+            # boxes[i,:,:] = corners[i][0,:,0:2]
+            boxes_[i,:,0] = boxes[i,:,1]
+            boxes_[i,0,1] = -boxes[i,1,0]
+            boxes_[i,1,1] = -boxes[i,0,0]
+
+        return boxes_
+
+    def get_boxes_old(self, cp=0.4, num_boxes=10):
         # TODO: add zed related functions for using the pointcloud
         # Get pointcloud
         # self.zed.retrieve_measure(self.pc, sl.MEASURE.XYZRGBA,sl.MEM.CPU, res)
 
         # pc = sl.Mat()
+        # print("CP: ", cp)
         if self.zed.grab(self.runtime) == sl.ERROR_CODE.SUCCESS:
             self.zed.retrieve_measure(self.pc,  sl.MEASURE.XYZRGBA, sl.MEM.CPU)
             # Get pointcloud as a numpy array (remove nan, -inf, +inf and RGB values)
@@ -192,6 +259,9 @@ class Zed:
         inputs = {'point_clouds': pc_all, 'point_cloud_dims_min': pc_min_all, 'point_cloud_dims_max': pc_max_all}
 
         outputs = self.model(inputs)
+        box_features = outputs["box_features"].detach()
+        box_features_ = torch.reshape(box_features, (1,1,128,256))
+        finetune = self.model_cp(box_features_)
         bbox_pred_points = outputs['outputs']['box_corners'].detach().cpu()
         # print(bbox_pred_points.shape)
         cls_prob = outputs["outputs"]["sem_cls_prob"].clone().detach().cpu()
@@ -199,11 +269,23 @@ class Zed:
         # model_outputs_all["box_corners"][env,batch_inds,:,:] = outputs["outputs"]["box_corners"].detach().cpu()
         # model_outputs_all["box_features"][env,batch_inds,:,:] = outputs["box_features"].detach().cpu()
 
-        box_features = outputs["box_features"].detach().cpu()
-
         chair_prob = cls_prob[:,:,3]
         obj_prob = outputs["outputs"]["objectness_prob"].clone().detach().cpu()
         sort_box = torch.sort(obj_prob,1,descending=True)
+
+        visualize = False
+        if visualize:
+            pc = pc_all.detach().cpu()
+            pc_plot = pc[:, pc[0,:,2] > 0.0,:]
+            plt.figure()
+            ax = plt.axes(projection='3d')
+            ax.scatter3D(
+                pc_plot[0,:,0], pc_plot[0,:,1],pc_plot[0,:,2]
+            )
+            ax.set_xlabel('X')
+            ax.set_ylabel('Y')
+            ax.set_zlabel('Z')
+            ax.set_aspect('auto')
 
         num_probs = 0
         boxes = np.zeros((num_boxes, 2,3))
@@ -230,8 +312,32 @@ class Zed:
                     if not flag:    
                         boxes[num_probs,:,:] = bb
                         num_probs +=1
+
+                if visualize:
+                    r0 = [bb[0, 0], bb[1, 0]]
+                    r1 = [bb[0, 1], bb[1, 1]]
+                    r2 = [bb[0, 2], bb[1, 2]]
+
+                    for s, e in combinations(np.array(list(product(r0, r1, r2))), 2):
+                        if (np.sum(np.abs(s-e)) == r0[1]-r0[0] or 
+                            np.sum(np.abs(s-e)) == r1[1]-r1[0] or 
+                            np.sum(np.abs(s-e)) == r2[1]-r2[0]):
+                            if (visualize and not flag):
+                                ax.plot3D(*zip(s, e), color=(0.5+0.5*prob, 0.1,0.1))
+
+                    
+        if visualize:
+            plt.savefig('pointcloud.png')
         boxes[:,0,:] -= cp
         boxes[:,1,:] += cp
+
+        # visualize = True #  TODO: change
+        
+        #     self.visualize_one_pc_wboxes(pc_all, bbox_pred_points, obj_prob, cls_prob, chair_prob, boxes)
+        # ipy.embed()
+        # finetuned_arr = finetune.cpu().detach().numpy()
+        # finetuned_arr = np.squeeze(finetuned_arr)
+        # boxes+=finetuned_arr
         return boxes, box_features
 
     def get_room_size_box(self, pc_all):
@@ -253,6 +359,39 @@ class Zed:
         outputs = self.model(inputs)
         box_features = outputs["box_features"].detach().cpu()
         return boxes, box_features
+
+    def visualize_pc(self, pc):
+        # take in pc file and playback
+        pass
+
+    def visualize_one_pc_wboxes(self, pc, bbox_pred_points, obj_prob, cls_prob, chair_prob, boxes):
+        # visualize the pc for a single time step and the bounding boxes
+        visualize = True
+        
+        pc = pc.detach().cpu()
+        sort_box = torch.sort(obj_prob,1,descending=True)
+        if visualize:
+            pc_plot = pc[:, pc[0,:,2] > 0.0,:]
+            plt.figure()
+            ax = plt.axes(projection='3d')
+            ax.scatter3D(
+                pc_plot[0,:,0], pc_plot[0,:,1],pc_plot[0,:,2]
+            )
+            ax.set_xlabel('X')
+            ax.set_ylabel('Y')
+            ax.set_zlabel('Z')
+            ax.set_aspect('auto')
+
+            r0 = [cc[0,0, 0], cc[0,1, 0]]
+            r1 = [cc[0,0, 1], cc[0,1, 1]]
+            r2 = [cc[0,0, 2], cc[0,1, 2]]
+
+            for s, e in combinations(np.array(list(product(r0, r1, r2))), 2):
+                if (np.sum(np.abs(s-e)) == r0[1]-r0[0] or 
+                    np.sum(np.abs(s-e)) == r1[1]-r1[0] or 
+                    np.sum(np.abs(s-e)) == r2[1]-r2[0]):
+                    if (visualize and not flag):
+                        ax.plot3D(*zip(s, e), color=(0.5+0.5*prob, 0.1,0.1))
 
     def parse_args(self, init):
         if len(self.opt.input_svo_file)>0 and self.opt.input_svo_file.endswith(".svo"):

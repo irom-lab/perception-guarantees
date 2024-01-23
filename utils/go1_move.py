@@ -34,9 +34,10 @@ class Go1_move():
                 self.state = self.true_state
                 self.timestamp = self.ts_timestamp
                 self.yaw = self.ts_yaw
+                self.camera = Zed(state_ic=self.true_state, yaw_ic=self.ts_yaw)
             # set zed camera for bounding boxes
             # initialize Zed 
-            # self.camera = Zed(state_ic=self.true_state, yaw_ic=self.ts_yaw)
+           
 
         if self.state_type == 'zed':
             # initialize Zed 

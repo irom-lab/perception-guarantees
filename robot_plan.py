@@ -6,14 +6,7 @@ import numpy as np
 from utils.go1_move import *
 from utils.plotting import *
 import time
-import multiprocessing
-import threading
-from queue import Queue
-import concurrent.futures
-from numpy.linalg import inv, pinv
 
-replan_finished = threading.Event()
-plan_queue = Queue()
 
 def state_to_planner(state, sp):
     # convert robot state to planner coordinates
@@ -52,87 +45,12 @@ def boxes_to_planner_frame(boxes, sp):
 #                          [max(x0,x1),max(y0,y1)]]))
 #     return np.array(boxes)
 
-def plan_generator(sp, state, boxes):
-    print("planning in parallel")
-
-    res = sp.plan(state, boxes)
-    # plan_queue.put(res)
-    # replan_finished.set()
-    return res
-
-def plan_executor(sp, go1, policy, t, vicon=True):
-    time_adjust=0
-    state_traj = []
-    vicon_traj=[]
-    for action in policy:
-        st = time.time()
-        go1.move(action)
-        # update go1 state 
-        if vicon:
-            vicon_state, vicon_yaw, vicon_ts = go1.get_true_state()
-            vicon_traj.append(vicon_state)
-            # print("VICON state: ", vicon_state, " yaw", vicon_yaw)
-        if time_adjust==0:
-            gs, _, yaw = go1.get_state()
-            state = state_to_planner(gs, sp)
-            state_traj.append(state)
-            # print("ZED state: ", state, " yaw", yaw)
-        et = time.time()
-        # print("Time taken ", et-st )
-        if (sp.dt-et+st+time_adjust) >0:
-            time.sleep((sp.dt-et+st+time_adjust))
-            t += sp.dt+time_adjust
-            time_adjust =0
-        else:
-            time_adjust = time_adjust+sp.dt-et+st
-            t += (et-st)
-    return state_traj, vicon_traj, state
-
-def pred_state_planner(state_, actions,Ad, Bd):
-    state = state_.T
-    new_state = np.copy(state)
-    print("Current state", state, state.shape)
-    print("Ad", Ad.shape, "Bd", Bd.shape)
-    for action_ in actions:
-        action_ = action_[:, np.newaxis]
-        action = np.copy(action_)
-        action[0] = -action_[1]
-        action[1] = action_[0]
-        print("action", action.shape)
-        print("Ad@state", (Ad@state).shape)
-        print("Ad.dot(state)", (np.dot(Ad, state)).shape)
-        print("Bd@action", (Bd@action).shape)
-        new_state = (Ad@state)+(Bd@action)
-        state = np.copy(new_state)
-        print("New state prediction", new_state, new_state.shape)
-    return (new_state.T)
-
-def pred_state(state_, actions,Ad, Bd):
-    state = state_[:, np.newaxis]
-    new_state = np.copy(state)
-    print("Current state", state, state.shape)
-    print("Ad", Ad.shape, "Bd", Bd.shape)
-    for action_ in actions:
-        action_ = action_[:, np.newaxis]
-        action = np.copy(action_)
-        # action[0] = -action_[1]
-        # action[1] = action_[0]
-        print("action", action.shape)
-        print("Ad@state", (Ad@state).shape)
-        print("Ad.dot(state)", (np.dot(Ad, state)).shape)
-        print("Bd@action", (Bd@action).shape)
-        new_state = (Ad@state)+(Bd@action)
-        state = np.copy(new_state)
-        print("New state prediction", new_state, new_state.shape)
-    new_state_list = (new_state.T).tolist()
-    print("list", new_state_list, new_state_list[0])
-    return new_state_list[0]
 
 def plan_loop():
     # ****************************************************
     # SET DESIRED FLAGS
     vicon = True # set if want vicon state active; If true, make sure ./vicon.sh is running from pg_ws (and zed box connected to gas dynamics network)
-    state_type =  'zed' #'vicon' # if want to set the state used as the vicon state, 'zed' 
+    state_type = 'zed' #if want to set the state used as the vicon state, 'zed' 
     replan = True # set if want to just follow open loop plan
     save_traj = True  # set if want to save trajectory and compare against plan
     plot_traj = True  # set if want to visualize trajectory at the end of execution
@@ -143,19 +61,17 @@ def plan_loop():
     num_samples = 2000  # number of samples used for the precomputed files
     dt = 0.1 #   planner dt
     radius = 0.5 # distance between intermediate goals on the frontier
-    chairs = [2, 3]  # list of chair labels to be used to get ground truth bounding boxes
-    num_detect = 10  # number of boxes for 3DETR to detect
-    cp = 1.19
-    sensor_dt = 1 # time in seconds to replan
-    replan_start = 4 # index to start replanning at
+    chairs = [1, 2, 3]  # list of chair labels to be used to get ground truth bounding boxes
+    num_detect = 15  # number of boxes for 3DETR to detect
+    cp = 0.4 #1.19 #1.64
+    sensor_dt = 2 # time in seconds to replan
+    num_times_detect = 1
     # ****************************************************
     if vicon:
         rospy.init_node('listener', anonymous=True)
         chair_states = GroundTruthBB(chairs)
         time.sleep(3)
-
-    if save_traj:
-        check_dir(result_dir)   
+        
  
     vicon_traj = []
     state_traj = []
@@ -170,21 +86,6 @@ def plan_loop():
     # initialize planner
     sp = Safe_Planner(goal_f=goal_forrestal, sensor_dt=sensor_dt,dt=dt, n_samples=num_samples, radius=radius)
     print("goal (planner coords): ", sp.goal)
-
-    # Dynamics
-    # k1=3.968; k2=2.517; k3=0.1353; k4=-0.5197; k5 = 4.651; k6 = 2.335
-    # A = np.array([[0,0,1,0],[0,0,0,1],[0,0,-k2,k3],[0,0,k4,-k1]])
-    # Ad = np.expm1(A*sp.dt)
-    # # Ad = np.identity(4) + A*
-    # B = np.array([[0,0],[0,0],[k6,0],[0,k5]])
-    # Bd =pinv(A)@(Ad-np.identity(4))@B
-
-    k1=3.968; k2=2.517; k3=0.1353; k4=-0.5197; k5 = 4.651; k6 = 2.335
-    A = np.array([[0,0,1,0],[0,0,0,1],[0,0,-k1,-k4],[0,0,-k3,-k2]])
-    Ad = np.expm1(A*sp.dt)
-    # Ad = np.identity(4) + A*
-    B = np.array([[0,0],[0,0],[k5,0],[0,k6]])
-    Bd =pinv(A)@(Ad-np.identity(4))@B
     
     # *** Alternate commenting of two lines below if goal changes
     # sp.find_goal_reachable(reachable)
@@ -217,42 +118,33 @@ def plan_loop():
     # GET INITIAL PLAN
     
     t = 0
-    cp = 0.0
 
     # perception + cp
     # boxes = get_boxes(sp)
     # boxes = np.array([[[2.0,4.0],[3.0,6.0]]])
     # boxes[:,0,:] -= cp
     # boxes[:,1,:] += cp
-    boxes = go1.camera.get_boxes(cp, num_detect)
-    boxes = boxes[:,:,0:2]
-    # print("Boxes before planner transform ",  boxes)
-    boxes = boxes_to_planner_frame(boxes, sp)
-    # print("Boxes after planner transform ",  boxes)
-    # plan
-    # state = state_to_planner(go1.state, sp)
-    # print("SHAPPPPPE, ", state.shape)
+    state = state_to_planner(go1.state, sp)
+    start_idx = np.argmin(cdist(np.array(sp.Pset),state))
+    for i in range(num_times_detect):
+        st = time.time()
+        boxes = go1.camera.get_boxes(cp, num_detect)
+        boxes = boxes[:,:,0:2]
+        # print("Boxes before planner transform ",  boxes)
+        boxes = boxes_to_planner_frame(boxes, sp)
+        res = sp.plan(state, boxes)
+        et = time.time()
+    
 
     # print(start_idx,Pset[start_idx],state)
-    gs, _, yaw = go1.get_state()
-    state = state_to_planner(gs, sp)
-    print("SHAPPPPPE, ", state.shape)
-    start_idx = np.argmin(cdist(np.array(sp.Pset),state))
     res = sp.plan(state, boxes)
     prev_policy = []
     idx_prev = 0
-    # if not replan:
-    plan_traj.append(res)
+    if not replan:
+        plan_traj.append(res)
 
-
-    # set up replan multiprocessing
-    # plan_gen_process = multiprocessing.Process(target=plan_generator, args=(sp, state, boxes))
-    
-
-   
     # fig, ax = sp.world.show()
     # plt.show()
-
 
     # ****************************************************
     # EXECUTION LOOP
@@ -264,49 +156,27 @@ def plan_loop():
         # boxes[:,0,:] -= cp
         # boxes[:,1,:] += cp
 
-        # if replan:
-        #     replan_finished.clear()
-        #     replan_timer = threading.Timer(0.8, plan_generator, args=(sp, state, boxes))
-        #     replan_timer.start()
 
-        # if replan_finished.is_set():
-        #     res = plan_queue.get()
+        if replan:
+            # plan
+            st = time.time()
+            gs, _, yaw = go1.get_state()
+            state = state_to_planner(gs, sp)
+            start_idx = np.argmin(cdist(np.array(sp.Pset),state))
 
-        # add in if time % 0.8: # so we aren't creating all sorts of new threads
-        # with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        #     # updated boxes
-        #     boxes = go1.camera.get_boxes(cp, num_detect)
-        #     boxes = boxes[:,:,0:2]
-        #     # print("Boxes before planner transform ",  boxes)
-        #     boxes = boxes_to_planner_frame(boxes, sp)
-        #     args = (sp, state, boxes)
-        #     future_plan = executor.submit(plan_generator, *args)
-
-        # if future_plan.done(): # this needs to be fixed..error returned on second iteration; 
-            #   trying to just update available plan if its been calculated from parallel thread running
-        #     res = future_plan.result()
-
-        # if replan:
-        #     # plan
-        #     st = time.time()
-        #     gs, _, yaw = go1.get_state()
-        #     state = state_to_planner(gs, sp)
-        #     start_idx = np.argmin(cdist(np.array(sp.Pset),state))
-
-        #     # print(start_idx,Pset[start_idx],state)
-        #     boxes = go1.camera.get_boxes(cp, num_detect)
-        #     boxes = boxes[:,:,0:2]
-        #     # print("Boxes before planner transform ",  boxes)
-        #     boxes = boxes_to_planner_frame(boxes, sp)
-        #     # print("Boxes after planner transform ",  boxes)
-
-        #     res = sp.plan(state, boxes)
-        #     plan_traj.append(res)
-        #     et = time.time()
-        #     t += (et-st)
-        #     if plot_traj and len(res[0]) > 1:
-        #         t_str = str(round(t, 1))
-        #         plot_trajectories(plan_traj, sp, vicon_traj, state_traj, ground_truth=ground_truth, replan=replan, save_fig=save_traj, filename=result_dir+t_str)
+            # print(start_idx,Pset[start_idx],state)
+            boxes = go1.camera.get_boxes(cp, num_detect)
+            boxes = boxes[:,:,0:2]
+            # print("Boxes before planner transform ",  boxes)
+            boxes = boxes_to_planner_frame(boxes, sp)
+            # print("Boxes after planner transform ",  boxes)
+            res = sp.plan(state, boxes)
+            plan_traj.append(res)
+            et = time.time()
+            t += (et-st)
+            if plot_traj and len(res[0]) > 1:
+                t_str = str(round(t, 1))
+                plot_trajectories(plan_traj, sp, vicon_traj, state_traj, ground_truth=ground_truth, replan=replan, save_fig=save_traj, filename=result_dir+t_str)
 
             # sp.show(res[0], true_boxes=ground_truth)
             # plt.show()
@@ -331,7 +201,7 @@ def plan_loop():
             else:
                 end_idx = len(policy)
             time_adjust = 0
-            for step in range(replan_start):
+            for step in range(end_idx):
                 st = time.time()
                 idx_prev = step
                 # print("step: ", step)
@@ -344,9 +214,7 @@ def plan_loop():
                     vicon_traj.append(vicon_state)
                     # print("VICON state: ", vicon_state, " yaw", vicon_yaw)
                 if time_adjust==0:
-                    # state, ts,yaw = go1.get_state()
-                    gs, _, yaw = go1.get_state()
-                    state = state_to_planner(gs, sp)
+                    state, ts,yaw = go1.get_state()
                     state_traj.append(state)
                     # print("ZED state: ", state, " yaw", yaw)
                 et = time.time()
@@ -358,37 +226,10 @@ def plan_loop():
                 else:
                     time_adjust = time_adjust+sp.dt-et+st
                     t += (et-st)
-
-            st = time.time()
-            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-                policy_to_exec= policy[replan_start:end_idx]
-                args_exec = (sp,go1, policy_to_exec,t, vicon)
-                traj = executor.submit(plan_executor, *args_exec)
-                s_hist, v_hist, state = traj.result()
-                # updated boxes
-                boxes = go1.camera.get_boxes(cp, num_detect)
-                boxes = boxes[:,:,0:2]
-                # print("Boxes before planner transform ",  boxes)
-                boxes = boxes_to_planner_frame(boxes, sp)
-                print("state", state)
-                state_go1 = state_to_go1(state[0], sp)
-                new_state_go1 = pred_state(state_go1, policy_to_exec,Ad, Bd)
-                # print("after pred state", new_state_go1, new_state_go1.shape)
-                new_state = state_to_planner(new_state_go1, sp)
-                print("after state to plabber", new_state, new_state.shape)
-                # new_state = state_to_planner(ns, sp)
-                args_replan = (sp, new_state, boxes)
-                p = executor.submit(plan_generator, *args_replan)
-                res = p.result()
-                plan_traj.append(res)
-                for (zs, vs) in zip(s_hist, v_hist):
-                    state_traj.append(zs)
-                    vicon_traj.append(vs)
-                if plot_traj and len(res[0]) > 1:
-                    t_str = str(round(t, 1))
-                    plot_trajectories(plan_traj, sp, vicon_traj, state_traj, ground_truth=ground_truth, replan=replan, save_fig=save_traj, filename=result_dir+t_str)
-            et = time.time()
-            t += (et-st)
+                # print("t: ", t)
+            #state, ts,yaw = go1.get_state()
+            #state_traj.append(state)
+            # print("state: ", go1.state)
             if go1.check_goal():
                 break
         else:
@@ -399,31 +240,10 @@ def plan_loop():
             #     idx_prev += 1
             #     action = policy[step]
             # else:
-            action =[[0,0]]
-            # go1.move(action)
-            # time.sleep(sp.dt)
-            # t += sp.dt
-            st = time.time()
-            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-                args_exec = (sp, go1, action, t, vicon)
-                traj = executor.submit(plan_executor, *args_exec)
-                s_hist, v_hist, state = traj.result()
-                # updated boxes
-                boxes = go1.camera.get_boxes(cp, num_detect)
-                boxes = boxes[:,:,0:2]
-                # print("Boxes before planner transform ",  boxes)
-                state_go1 = state_to_go1(state[0], sp)
-                new_state_go1 = pred_state(state_go1, policy_to_exec,Ad, Bd)
-                new_state = state_to_planner(new_state_go1, sp)
-                # print("after pred state", new_state_go1, new_state_go1.shape)
-                boxes = boxes_to_planner_frame(boxes, sp)
-                # new_state = state_to_planner(ns, sp)
-                args_replan = (sp, new_state, boxes)
-                p = executor.submit(plan_generator, *args_replan)
-                res = p.result()
-                plan_traj.append(res)
-            et = time.time()
-            t += (et-st)
+            action = [0,0]
+            go1.move(action)
+            time.sleep(sp.dt)
+            t += sp.dt
         if t > 40:
             # time safety break
             print("BREAK 2: RAN OUT OF TIME")
@@ -441,11 +261,10 @@ def plan_loop():
     if plot_traj:
         # currently only set up for open loop init plan
         # TODO: handle plotting with replan
-        plot_trajectories(plan_traj, sp, vicon_traj, state_traj, ground_truth=ground_truth, replan=replan, save_fig=save_traj, filename=result_dir)
+       plot_trajectories(plan_traj, sp, vicon_traj, state_traj, ground_truth=ground_truth, replan=replan, save_fig=save_traj, filename=result_dir)
 
     if vicon:    
         rospy.spin()
-
 
 if __name__ == '__main__':
     plan_loop()
