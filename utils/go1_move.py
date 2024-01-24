@@ -34,10 +34,15 @@ class Go1_move():
                 self.state = self.true_state
                 self.timestamp = self.ts_timestamp
                 self.yaw = self.ts_yaw
+                self.camera = Zed(state_ic=self.true_state, yaw_ic=self.ts_yaw)
+            # set zed camera for bounding boxes
+            # initialize Zed 
+           
 
         if self.state_type == 'zed':
             # initialize Zed 
             self.camera = Zed(state_ic=self.true_state, yaw_ic=self.ts_yaw)
+            time.sleep(1)
             # wait for initial state
             if (self.camera.get_pose()[0] == None):
                 time.sleep(0.5)
@@ -85,16 +90,6 @@ class Go1_move():
             self.true_state = state
             self.ts_timestamp = timestamp
         return self.true_state, self.ts_yaw, timestamp
-
-    def get_true_bb(self):
-        # c1x, c1y = self.chair1_state.x, self.chair1_state.y
-        c2x, c2y = self.chair2_state.x, self.chair2_state.y
-        # bb1 = [[c1x-0.5, c1y-0.5], [c1x+0.5, c1y+0.5]]
-        bb2 = [[c2x-0.5, c2y-0.5], [c2x+0.5, c2y+0.5]]
-        bb = []
-        # bb.append(bb1)
-        bb.append(bb2)
-        return np.array(bb)
     
     def calc_velocity(self, x1, y1, t1, x2, y2, t2, units='microseconds'):
         if units == 'microseconds':

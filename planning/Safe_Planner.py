@@ -90,10 +90,19 @@ class World:
         # TODO: measure and update empirically
         # x_brake = 0.12512712
         # y_brake = 0.1972604
-        new_state = expm(A*10**3)@state
+        # new_state = expm(A*10**3)@state
+        # if self.isValid(new_state):
+        #     return True
+
+        # x_brake = state[2]/k1
+        # y_brake = state[3]/k2
+        x_brake = 0.5/k1#+0.5
+        y_brake = 0.5/k2#+0.5 # 0.5 is approximate state estimation error
+        new_state = np.array([state[0]+x_brake, state[1]+y_brake,0,0])
         if self.isValid(new_state):
             return True
         return False
+        # return False
 
     def show(self, true_boxes = None):
         '''Plot occupied space'''
@@ -158,7 +167,7 @@ class Safe_Planner:
                  FoV_close = 1,
                  n_samples = 2000,
                  max_search_iter = 1000,
-                 weight = 5, #weight for cost to go
+                 weight = 10,  #5, #weight for cost to go
                  seed = 0):
         # load inputs
 

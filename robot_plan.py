@@ -50,21 +50,22 @@ def plan_loop():
     # ****************************************************
     # SET DESIRED FLAGS
     vicon = True # set if want vicon state active; If true, make sure ./vicon.sh is running from pg_ws (and zed box connected to gas dynamics network)
-    state_type = 'zed' # 'vicon' if want to set the state used as the vicon state, 'zed' 
+    state_type = 'zed' #if want to set the state used as the vicon state, 'zed' 
     replan = True # set if want to just follow open loop plan
     save_traj = True  # set if want to save trajectory and compare against plan
     plot_traj = True  # set if want to visualize trajectory at the end of execution
-    result_dir = 'results/debug_trial1/' # set to unique trial identifier if saving results
+    result_dir = 'results/debug_trial2/' # set to unique trial identifier if saving results
     goal_forrestal = [7.0, -2.0, 0.0, 0.0] # goal in forrestal coordinates
     reachable_file = 'planning/pre_compute/reachable_10Hz.pkl'
     pset_file = 'planning/pre_compute/Pset_10Hz.pkl'
     num_samples = 2000  # number of samples used for the precomputed files
     dt = 0.1 #   planner dt
-    radius = 0.1 # distance between intermediate goals on the frontier
-    chairs = [2, 3]  # list of chair labels to be used to get ground truth bounding boxes
-    num_detect = 10  # number of boxes for 3DETR to detect
-    cp = 1.0
-    sensor_dt = 1 # time in seconds to replan
+    radius = 0.5 # distance between intermediate goals on the frontier
+    chairs = [1, 2, 3]  # list of chair labels to be used to get ground truth bounding boxes
+    num_detect = 15  # number of boxes for 3DETR to detect
+    cp = 0.4 #1.19 #1.64
+    sensor_dt = 2 # time in seconds to replan
+    num_times_detect = 1
     # ****************************************************
     if vicon:
         rospy.init_node('listener', anonymous=True)
@@ -117,21 +118,23 @@ def plan_loop():
     # GET INITIAL PLAN
     
     t = 0
-    cp = 0.0
 
     # perception + cp
     # boxes = get_boxes(sp)
     # boxes = np.array([[[2.0,4.0],[3.0,6.0]]])
     # boxes[:,0,:] -= cp
     # boxes[:,1,:] += cp
-    boxes = go1.camera.get_boxes(cp, num_detect)
-    boxes = boxes[:,:,0:2]
-    # print("Boxes before planner transform ",  boxes)
-    boxes = boxes_to_planner_frame(boxes, sp)
-    # print("Boxes after planner transform ",  boxes)
-    # plan
     state = state_to_planner(go1.state, sp)
     start_idx = np.argmin(cdist(np.array(sp.Pset),state))
+    for i in range(num_times_detect):
+        st = time.time()
+        boxes = go1.camera.get_boxes(cp, num_detect)
+        boxes = boxes[:,:,0:2]
+        # print("Boxes before planner transform ",  boxes)
+        boxes = boxes_to_planner_frame(boxes, sp)
+        res = sp.plan(state, boxes)
+        et = time.time()
+    
 
     # print(start_idx,Pset[start_idx],state)
     res = sp.plan(state, boxes)
@@ -171,8 +174,9 @@ def plan_loop():
             plan_traj.append(res)
             et = time.time()
             t += (et-st)
-            if plot_traj:
-                plot_trajectories(plan_traj, sp, vicon_traj, state_traj, ground_truth=ground_truth, replan=replan, save_fig=save_traj, filename=result_dir+str(t))
+            if plot_traj and len(res[0]) > 1:
+                t_str = str(round(t, 1))
+                plot_trajectories(plan_traj, sp, vicon_traj, state_traj, ground_truth=ground_truth, replan=replan, save_fig=save_traj, filename=result_dir+t_str)
 
             # sp.show(res[0], true_boxes=ground_truth)
             # plt.show()
