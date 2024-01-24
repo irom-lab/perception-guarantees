@@ -114,7 +114,7 @@ class World:
                 xs, ys = self.free_space_new.exterior.xy
                 ax.fill(xs,ys, edgecolor = 'k', linestyle='--', fc = (0,0,0,0))
             else:
-                for geom in self.free_space.geoms:
+                for geom in self.free_space_new.geoms:
                     if geom.geom_type == 'Polygon':
                         xs, ys = geom.exterior.xy
                         ax.fill(xs,ys, edgecolor = 'k', linestyle='--', fc = (0,0,0,0))
