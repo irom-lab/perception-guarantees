@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
-def plot_trajectories(reses, sp, vicon_traj, state_traj, ground_truth=None, replan=False, save_fig=False, filename=None): #executed_traj):
+def plot_trajectories(reses, sp, vicon_traj, state_traj, replan_state=None, ground_truth=None, replan=False, save_fig=False, filename=None): #executed_traj):
     '''Plot solution'''
     fig, ax = sp.world.show(true_boxes=ground_truth)
     plt.gca().set_aspect('equal', adjustable='box')
@@ -37,15 +37,15 @@ def plot_trajectories(reses, sp, vicon_traj, state_traj, ground_truth=None, repl
         # print('vicon tf', vicon_tf.shape)
         ax.plot(state_tf[0, :], state_tf[1, :], c='c', linewidth=1, label='state')
         if replan:
-            ax.plot(state_tf[0,range(0,len(state_traj),int(sp.sensor_dt/sp.dt))], state_tf[1,range(0,len(state_traj),int(sp.sensor_dt/sp.dt))], 'co',label='replan')
-    # TODO: add in state_traj
-        
+            # ax.plot(state_tf[0,range(0,len(state_traj),int(sp.sensor_dt/sp.dt))], state_tf[1,range(0,len(state_traj),int(sp.sensor_dt/sp.dt))], 'co',label='replan')
+            replan_arr = np.array(replan_state)
+            ax.plot(replan_arr[:, 0], replan_arr[:, 1],'co',label='replan')
     plt.legend()
     
     if save_fig:
         plt.savefig(filename + 'traj_plot.png')
     
-    plt.show()
+    # plt.show()
 
 def check_dir(path):
     # check if directory exists, if not create
@@ -55,3 +55,15 @@ def check_dir(path):
 
     else:
         print(f"Directory '{path}' already exists.")
+        user_input = input("Are you sure you want to overwrite? (y/n): ")
+    
+        if user_input.lower() == 'y':
+            print("Overwriting...")
+            return True
+            # Add your code to perform the overwrite here
+        elif user_input.lower() == 'n':
+            print("Operation canceled.")
+            return False
+        else:
+            print("Invalid input. Please enter 'y' or 'n'.")
+            return False
