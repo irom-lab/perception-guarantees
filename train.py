@@ -34,7 +34,7 @@ def main(raw_args=None):
 	# Initialize dataset and dataloader
 	dataset = PointCloudDataset("data/features.pt", "data/bbox_labels.pt", "data/loss_mask.pt")
 	prior_dataset = PointCloudDataset("data/features_test_old.pt", "data/bbox_labels_test_old.pt", "data/loss_mask_test_old.pt")
-	test_dataset = PointCloudDataset("data/features_test.pt", "data/bbox_labels_test.pt", "data/loss_mask_test.pt")
+	test_dataset = PointCloudDataset("data/features_test.pt", "data/bbox_labels_test.pt", "data/loss_mask_test.pt", "data/finetune_test.pt")
 	batch_size = 100 #100
 	N=len(dataset)
 	N_obj = dataset.bbox_labels.shape[2]
@@ -65,60 +65,69 @@ def main(raw_args=None):
 	# Fine-tuning
 	# Initialize NN model
 	num_in = dataset.feature_dims[0]*dataset.feature_dims[1]
-	num_out = (N_obj, 2,3) # bbox corner representation
+	num_out = (15, 2,3) # bbox corner representation
 	model_cp = MLPModelDet(num_in, num_out)
 	model_cp.to(device)
 	# Define optimizer
-	optimizer_cp = torch.optim.Adam(model_cp.parameters(), lr=1e-4) 
+	optimizer_cp = torch.optim.Adam(model_cp.parameters(), lr=1e-3) 
 	###################################################################
 	# Choose loss weights
 	w1 = torch.tensor(1.0).to(device) #1
-	w2 = torch.tensor(0.1).to(device) #0.1
+	w2 = torch.tensor(0.5).to(device) #0.1
 	w3 = torch.tensor(0.1).to(device) #1
 
-	# # Run the finetuning  loop
-	# print("Finetuning")
-	# num_epochs = 100 # 1000
-	# for epoch in range(0, num_epochs):
+	# Run the finetuning  loop
+	print("Finetuning")
+	num_epochs = 100 # 1000
+	for epoch in range(0, num_epochs):
 
-	# 	# Initialize running losses for this epoch
-	# 	current_loss = 0.0
-	# 	current_loss_true = 0.0
-	# 	num_batches = 0
-	# 	for i, data in enumerate(dataloader_prior, 0):
+		# Initialize running losses for this epoch
+		current_loss = 0.0
+		current_loss_true = 0.0
+		num_batches = 0
+		for i, data in enumerate(dataloader_test, 0):
 
-	# 		# Get inputs, targets, loss mask
-	# 		inputs, targets, loss_mask = data
-	# 		inputs = inputs.to(device)
-	# 		boxes_3detr = targets["bboxes_3detr"].to(device)
-	# 		boxes_gt = targets["bboxes_gt"].to(device)
-	# 		loss_mask = loss_mask.to(device)
+			# Get inputs, targets, loss mask
+			inputs, targets, loss_mask, finetune = data
+			inputs = inputs.to(device)
+			boxes_3detr = finetune["bboxes_3detr"].to(device)
+			boxes_gt = finetune["bboxes_gt"].to(device)
+			loss_mask = torch.ones(loss_mask.shape[0], loss_mask.shape[1],  boxes_gt.shape[2]).to(device)
+			# print(loss_mask.shape, boxes_gt.shape)
 
-	# 		# Perform forward pass
-	# 		outputs = model_cp(inputs)
-	# 		# Compute loss
-	# 		loss = box_loss_diff_jit(outputs + boxes_3detr, boxes_gt, w1, w2, w3, loss_mask)
+			# Perform forward pass
+			outputs = model_cp(inputs)
+			if  torch.any(torch.isnan(outputs)):
+				# ipy.embed()
+				idx = torch.where(torch.isnan(outputs))
+				outputs[idx] = 0
+				# loss_mask[idx[0], idx[1], idx[2]] = 0
+				# print("Skipping ", i)
+				# continue
+			# Compute loss
+			# print("Outputs: ", outputs.shape, " Boxes 3DETR: ", boxes_3detr.shape, " boxes gt: ", boxes_gt.shape, " Loss mask: ", loss_mask.shape)
+			loss = box_loss_diff_jit(outputs + boxes_3detr, boxes_gt, w1, w2, w3, loss_mask)
 
-	# 		# Compute true (boolean) version of loss for this batch
-	# 		loss_true, not_enclosed = box_loss_true(outputs + boxes_3detr, boxes_gt, loss_mask, 0.01)
+			# Compute true (boolean) version of loss for this batch
+			loss_true, not_enclosed = box_loss_true(outputs + boxes_3detr, boxes_gt, loss_mask, 0.01)
 
-	# 		# Zero the gradients
-	# 		optimizer_cp.zero_grad()
+			# Zero the gradients
+			optimizer_cp.zero_grad()
 
-	# 		# Perform backward pass
-	# 		loss.backward()
+			# Perform backward pass
+			loss.backward()
 
-	# 		# Perform optimization
-	# 		optimizer_cp.step()
-	# 		# Update current loss for this epoch (summing across batches)
-	# 		current_loss += loss.item()
-	# 		current_loss_true += loss_true.item()
-	# 		num_batches += 1
-	# 	# Print losses (averaged across batches in this epoch)
-	# 	print_interval = 1
-	# 	if verbose and (epoch % print_interval == 0):
-	# 		print("epoch: ", epoch, "; loss: ", '{:02.6f}'.format(current_loss/num_batches),
-	# 			  "; loss true: ", '{:02.6f}'.format(current_loss_true / num_batches), end='\r')
+			# Perform optimization
+			optimizer_cp.step()
+			# Update current loss for this epoch (summing across batches)
+			current_loss += loss.item()
+			current_loss_true += loss_true.item()
+			num_batches += 1
+		# Print losses (averaged across batches in this epoch)
+		print_interval = 1
+		if verbose and (epoch % print_interval == 0):
+			print("epoch: ", epoch, "; loss: ", '{:02.6f}'.format(current_loss/num_batches),
+				  "; loss true: ", '{:02.6f}'.format(current_loss_true / num_batches), end='\r')
 	# 	###################################################################
 
 
@@ -348,8 +357,8 @@ def main(raw_args=None):
 	# if verbose:
 	# 	print('Training complete.')
 
-	# # Save model
-	# torch.save(model.state_dict(), "trained_models/perception_model")
+	# Save model
+	torch.save(model_cp.state_dict(), "trained_models/perception_model")
 	# torch.save(prior.state_dict(), "trained_models/perception_prior")
 	# if verbose:
 	# 	print('Saved trained model.')

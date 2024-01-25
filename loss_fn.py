@@ -45,6 +45,9 @@ def box_loss_diff(
 
     # Calculate volume of ground truth and predicted boxes
     vol_gt = torch.prod(corners_gt[:, :, :, 1, :][:,:,None,:] - corners_gt[:, :, :, 0, :][:,:,None,:], 4)
+    idx = torch.where(vol_gt ==0)
+    loss_mask[idx[0],idx[1],idx[3]] = 0
+    vol_gt[idx] = 0.001
     vol_pred = torch.prod(corners2_pred - corners1_pred, 4)
 
     # Calculate intersection between predicted and ground truth boxes
@@ -71,6 +74,8 @@ def box_loss_diff(
     l1 = vol_gt_minus_pred / vol_gt
     l2 = vol_pred_minus_gt / vol_pred
     l3 = (vol_enclosing - vol_union)/vol_enclosing
+
+    # ipy.embed()
 
     losses = (w1*l1 + w2*l2 + w3*l3)/(w1+w2+w3)
     # ipy.embed()
@@ -147,6 +152,7 @@ def box_loss_true(
     # Mask loss (0 for locations where object was not visible)
     not_enclosed = torch.mul(loss_mask, not_enclosed.view((not_enclosed.shape[0], not_enclosed.shape[1], not_enclosed.shape[2])))
 
+    # ipy.embed()
     # Take max loss across locations in each environment and for each object in the environment
     losses = not_enclosed.amax(dim=1)
     losses = losses.amax(dim=1)
@@ -156,6 +162,8 @@ def box_loss_true(
     # print("Loss ", mean_loss)
 
     # ipy.embed()
+    # if mean_loss == 1:
+        # ipy.embed()
 
     return mean_loss, not_enclosed
 
