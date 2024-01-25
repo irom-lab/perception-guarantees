@@ -8,8 +8,8 @@ import robot_interface as sdk
 
 
 class Go1_move():
-    def __init__(self, sp, vicon=False, state_type='zed'):
-        self.sp = sp
+    def __init__(self, goal, vicon=False, state_type='zed'):
+        # self.sp = sp
         self.state = [0.0, 0.0, 0.0, 0.0]
         self.true_state = [0.0, 0.0, 0.0, 0.0]
         self.yaw = 0.0
@@ -17,7 +17,7 @@ class Go1_move():
         self.timestamp = 0
         self.ts_timestamp = 0
         self.state_type = state_type
-        self.goal = sp.goal_f
+        self.goal = goal
 
         # initialize states
         if vicon:
@@ -113,15 +113,22 @@ class Go1_move():
             return False
 
     def correct_yaw(self):
-        return -self.yaw/1.0
+        return -self.yaw/2
         
     def move(self, action):
         ux, uy = action
         # check ux, uy fall between -1, 1
-        bound = 0.5 # TODO: change back to 1
+        bound = 0.8 # TODO: change back to 1
         ux = max(-bound, min(ux, bound))
         uy = max(-bound, min(uy, bound))
+        if np.abs(ux) < 0.2 and np.abs(ux) > 0.05:
+            ux = ux / np.abs(ux) * 0.2
+        if np.abs(uy) < 0.2 and np.abs(uy) > 0.05:
+            uy = uy / np.abs(uy) * 0.2
+        
         yaw_cmd = self.correct_yaw() 
+        if np.abs(yaw_cmd) > 0.15:
+            print("YAW Correction: (yaw, yaw_cmd)", self.yaw, yaw_cmd)
 
         self.cmd.mode = 2
         self.cmd.gaitType = 1
@@ -143,40 +150,3 @@ class Go1_move():
         self.udp.Send()
 
 
-class GroundTruthBB():
-    def __init__(self, chair_nums=[]):
-            self.chair_numbers = chair_nums
-            self.chair_states = {}
-
-            if len(self.chair_numbers) > 0:
-                for num in self.chair_numbers:
-                    topic_name = "vicon/chair_" + str(num) + "/chair_" + str(num)
-                    self.chair_states[num] = ViconStateListener(topic_name, "x")
-
-
-    def get_true_bb(self):
-        padding = 0.34
-        bb_list = []
-        for num in self.chair_numbers:
-            x, y = self.chair_states[num].x, self.chair_states[num].y
-            if (np.abs(x) < 0.001) and (np.abs(y) < 0.001):
-                continue
-
-            bb = [[x - padding, y - padding], [x + padding, y + padding]] 
-            bb_list.append(bb)
-
-        return np.array(bb_list)
-
-        # # c1x, c1y = self.chair1_state.x, self.chair1_state.y
-        # c2x, c2y = self.chair2_state.x, self.chair2_state.y
-        # # bb1 = [[c1x-0.5, c1y-0.5], [c1x+0.5, c1y+0.5]]
-        # bb2 = [[c2x-0.5, c2y-0.5], [c2x+0.5, c2y+0.5]]
-        # bb = []
-        # # bb.append(bb1)
-        # bb.append(bb2)
-        # return np.array(bb)
-    
-
-    def project_bb(self):
-        # TODO: use markers to get bb in x-y plane
-        pass

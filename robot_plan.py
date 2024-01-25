@@ -50,18 +50,18 @@ def plan_loop():
     # ****************************************************
     # SET DESIRED FLAGS
     vicon = True # set if want vicon state active; If true, make sure ./vicon.sh is running from pg_ws (and zed box connected to gas dynamics network)
-    state_type = 'zed' #if want to set the state used as the vicon state, 'zed' 
-    replan = False # set if want to just follow open loop plan
+    state_type = 'zed' #'zed' #if want to set the state used as the vicon state, 'zed' 
+    replan = True # set if want to just follow open loop plan
     save_traj = True  # set if want to save trajectory and compare against plan
     plot_traj = True  # set if want to visualize trajectory at the end of execution
     result_dir = 'results/debug_trial2/' # set to unique trial identifier if saving results
     goal_forrestal = [7.0, -2.0, 0.0, 0.0] # goal in forrestal coordinates
-    reachable_file = 'planning/pre_compute/reachable_10Hz.pkl'
-    pset_file = 'planning/pre_compute/Pset_10Hz.pkl'
+    reachable_file = 'planning/pre_compute/reachable_onespeed.pkl'
+    pset_file = 'planning/pre_compute/Pset_onespeed.pkl'
     num_samples = 2000  # number of samples used for the precomputed files
-    dt = 0.1 #   planner dt
+    dt = 0.01 #   planner dt
     radius = 0.7 # distance between intermediate goals on the frontier
-    chairs = [1, 2, 3]  # list of chair labels to be used to get ground truth bounding boxes
+    chairs = [3]  # list of chair labels to be used to get ground truth bounding boxes
     num_detect = 15  # number of boxes for 3DETR to detect
     cp = 0.4 #1.19 #1.64
     sensor_dt = 1.5 # time in seconds to replan
@@ -99,7 +99,7 @@ def plan_loop():
     # sp.find_goal_reachable(reachable)
     sp.load_reachable(Pset, reachable)
 
-    go1 = Go1_move(sp, vicon=vicon, state_type=state_type)
+    go1 = Go1_move(sp.goal_f, vicon=vicon, state_type=state_type)
     go1.get_state()
     # print(go1.state)
     # time.sleep(2)
@@ -205,7 +205,7 @@ def plan_loop():
             policy = (np.array([[0,1],[-1,0]])@policy_before_trans.T).T
             prev_policy = policy
 
-            print("policy: ", policy)
+            # print("policy: ", policy)
             if replan:
                 end_idx = min(int(sp.sensor_dt/sp.dt),len(policy))
             else:
@@ -216,11 +216,12 @@ def plan_loop():
                 idx_prev = step
                 # print("step: ", step)
                 action = policy[step]
-                # print("action: ", action)
+                print("action: ", action)
                 go1.move(action)
                 # update go1 state 
                 if vicon:
                     vicon_state, vicon_yaw, vicon_ts = go1.get_true_state()
+                    # print("yaw", vicon_yaw)
                     vicon_traj.append(vicon_state)
                     # print("VICON state: ", vicon_state, " yaw", vicon_yaw)
                 if time_adjust==0:
@@ -248,11 +249,11 @@ def plan_loop():
             # for step in range(int(sp.sensor_dt/sp.dt)):
 
             # apply the previous open loop policy for one time step
-            if len(prev_policy) > idx_prev+1:
-                idx_prev += 1
-                action = prev_policy[idx_prev]
-            else:
-                action = [0,0]
+            # if len(prev_policy) > idx_prev+1:
+            #     idx_prev += 1
+            #     action = prev_policy[idx_prev]
+            # else:
+            action = [0,0]
             # print("ACTION", action)
             # print("prev policy to end", prev_policy[idx_prev::])
             # print("shape", len(prev_policy), len(prev_policy[idx_prev::]))
@@ -267,7 +268,7 @@ def plan_loop():
             go1.move(action)
             time.sleep(sp.dt)
             t += sp.dt
-        if t > 40:
+        if t > 20:
             # time safety break
             print("BREAK 2: RAN OUT OF TIME")
             break

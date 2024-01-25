@@ -39,7 +39,8 @@ def plot_trajectories(reses, sp, vicon_traj, state_traj, replan_state=None, grou
         if replan:
             # ax.plot(state_tf[0,range(0,len(state_traj),int(sp.sensor_dt/sp.dt))], state_tf[1,range(0,len(state_traj),int(sp.sensor_dt/sp.dt))], 'co',label='replan')
             replan_arr = np.array(replan_state)
-            ax.plot(replan_arr[:, 0], replan_arr[:, 1],'co',label='replan')
+            if replan_arr.shape != ():
+                ax.plot(replan_arr[:, 0], replan_arr[:, 1],'co',label='replan')
     plt.legend()
     
     if save_fig:

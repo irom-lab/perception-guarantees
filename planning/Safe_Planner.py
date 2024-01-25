@@ -227,7 +227,6 @@ class Safe_Planner:
         origin_shift = np.atleast_2d(np.array([self.world.w/2,0,0,0]))
 
         state_tf = (np.array([[[0,-1,0,0],[1,0,0,0],[0,0,0,-1],[0,0,1,0]]]) @ state.T + origin_shift.T)
-
         return state_tf.squeeze()
 
     # preparation
