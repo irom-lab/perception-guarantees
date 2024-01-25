@@ -56,16 +56,17 @@ def plan_loop():
     plot_traj = True  # set if want to visualize trajectory at the end of execution
     result_dir = 'results/debug_trial2/' # set to unique trial identifier if saving results
     goal_forrestal = [7.0, -2.0, 0.0, 0.0] # goal in forrestal coordinates
-    reachable_file = 'planning/pre_compute/reachable_onespeed.pkl'
-    pset_file = 'planning/pre_compute/Pset_onespeed.pkl'
+    reachable_file = 'planning/pre_compute/reachable_10Hz.pkl'
+    pset_file = 'planning/pre_compute/Pset_10Hz.pkl'
     num_samples = 2000  # number of samples used for the precomputed files
-    dt = 0.01 #   planner dt
+    dt = 0.1 #   planner dt
     radius = 0.7 # distance between intermediate goals on the frontier
     chairs = [3]  # list of chair labels to be used to get ground truth bounding boxes
     num_detect = 15  # number of boxes for 3DETR to detect
     cp = 0.4 #1.19 #1.64
     sensor_dt = 1.5 # time in seconds to replan
     num_times_detect = 1
+    max_search_iter = 300
     # ****************************************************
     
     if save_traj:
@@ -92,7 +93,7 @@ def plan_loop():
     Pset = pickle.load(f)
 
     # initialize planner
-    sp = Safe_Planner(goal_f=goal_forrestal, sensor_dt=sensor_dt,dt=dt, n_samples=num_samples, radius=radius)
+    sp = Safe_Planner(goal_f=goal_forrestal, sensor_dt=sensor_dt,dt=dt, n_samples=num_samples, radius=radius, max_search_iter=max_search_iter)
     print("goal (planner coords): ", sp.goal)
     
     # *** Alternate commenting of two lines below if goal changes
@@ -170,7 +171,7 @@ def plan_loop():
             st = time.time()
             gs, _, yaw = go1.get_state()
             state = state_to_planner(gs, sp)
-            start_idx = np.argmin(cdist(np.array(sp.Pset),state))
+            # start_idx = np.argmin(cdist(np.array(sp.Pset),state))
             replan_states.append([state[0, 0], state[0, 1]])
 
             # print(start_idx,Pset[start_idx],state)
@@ -183,9 +184,9 @@ def plan_loop():
             plan_traj.append(res)
             et = time.time()
             t += (et-st)
-            if plot_traj and len(res[0]) > 1:
-                t_str = str(round(t, 1))
-                plot_trajectories(plan_traj, sp, vicon_traj, state_traj, replan_state=replan_states, ground_truth=ground_truth, replan=replan, save_fig=save_traj, filename=result_dir+t_str)
+            # if plot_traj and len(res[0]) > 1:
+            #     t_str = str(round(t, 1))
+            #     plot_trajectories(plan_traj, sp, vicon_traj, state_traj, replan_state=replan_states, ground_truth=ground_truth, replan=replan, save_fig=save_traj, filename=result_dir+t_str)
 
             # sp.show(res[0], true_boxes=ground_truth)
             # plt.show()
@@ -216,7 +217,7 @@ def plan_loop():
                 idx_prev = step
                 # print("step: ", step)
                 action = policy[step]
-                print("action: ", action)
+                # print("action: ", action)
                 go1.move(action)
                 # update go1 state 
                 if vicon:
@@ -225,8 +226,9 @@ def plan_loop():
                     vicon_traj.append(vicon_state)
                     # print("VICON state: ", vicon_state, " yaw", vicon_yaw)
                 if time_adjust==0:
-                    state, ts,yaw = go1.get_state()
-                    state_traj.append(state)
+                    gs, ts,yaw = go1.get_state()
+                    state_traj.append(gs)
+                    state = state_to_planner(gs, sp)
                     # print("ZED state: ", state, " yaw", yaw)
                 et = time.time()
                 # print("Time taken ", et-st )
@@ -268,7 +270,7 @@ def plan_loop():
             go1.move(action)
             time.sleep(sp.dt)
             t += sp.dt
-        if t > 20:
+        if t > 40:
             # time safety break
             print("BREAK 2: RAN OUT OF TIME")
             break

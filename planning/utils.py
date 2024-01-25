@@ -311,10 +311,10 @@ def find_frontier(xbar_now, world_box, start, FoV, polygon=False):
             if intersect(world_edge[0],world_edge[1],ray_line[0],ray_line[1]):
                 intersection = line_intersection(world_edge, ray_line)
                 segment = np.array([vertex, intersection])
-        if np.linalg.norm(segment[0]-segment[1]) < 1e-5:
-            segment = np.array([vertex-np.array(1e-5*np.cos(ray),1e-5*np.sin(ray)), 
-                                intersection+1e-5*np.array([np.cos(ray),np.sin(ray)])])
-        segments.append(segment)
+            if np.linalg.norm(segment[0]-segment[1]) < 1e-5:
+                segment = np.array([vertex-np.array(1e-5*np.cos(ray),1e-5*np.sin(ray)), 
+                                    intersection+1e-5*np.array([np.cos(ray),np.sin(ray)])])
+            segments.append(segment)
 
         # for this ray, look at each box
         for box, vertices in box_vertices.items():
