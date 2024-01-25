@@ -51,7 +51,7 @@ def plan_loop():
     # SET DESIRED FLAGS
     vicon = True # set if want vicon state active; If true, make sure ./vicon.sh is running from pg_ws (and zed box connected to gas dynamics network)
     state_type = 'zed' #if want to set the state used as the vicon state, 'zed' 
-    replan = True # set if want to just follow open loop plan
+    replan = False # set if want to just follow open loop plan
     save_traj = True  # set if want to save trajectory and compare against plan
     plot_traj = True  # set if want to visualize trajectory at the end of execution
     result_dir = 'results/debug_trial2/' # set to unique trial identifier if saving results
@@ -60,13 +60,20 @@ def plan_loop():
     pset_file = 'planning/pre_compute/Pset_10Hz.pkl'
     num_samples = 2000  # number of samples used for the precomputed files
     dt = 0.1 #   planner dt
-    radius = 0.5 # distance between intermediate goals on the frontier
+    radius = 0.7 # distance between intermediate goals on the frontier
     chairs = [1, 2, 3]  # list of chair labels to be used to get ground truth bounding boxes
     num_detect = 15  # number of boxes for 3DETR to detect
     cp = 0.4 #1.19 #1.64
-    sensor_dt = 2 # time in seconds to replan
+    sensor_dt = 1.5 # time in seconds to replan
     num_times_detect = 1
     # ****************************************************
+    
+    if save_traj:
+        # check directory and overwrite/exit on user input
+        dir = check_dir(result_dir)
+        if not dir:
+            sys.exit()
+
     if vicon:
         rospy.init_node('listener', anonymous=True)
         chair_states = GroundTruthBB(chairs)
@@ -76,6 +83,7 @@ def plan_loop():
     vicon_traj = []
     state_traj = []
     plan_traj = []
+    replan_states = []
 
     # load pre-computed: need to recompute for actual gains
     f = open(reachable_file, 'rb')
@@ -163,6 +171,7 @@ def plan_loop():
             gs, _, yaw = go1.get_state()
             state = state_to_planner(gs, sp)
             start_idx = np.argmin(cdist(np.array(sp.Pset),state))
+            replan_states.append([state[0, 0], state[0, 1]])
 
             # print(start_idx,Pset[start_idx],state)
             boxes = go1.camera.get_boxes(cp, num_detect)
@@ -176,7 +185,7 @@ def plan_loop():
             t += (et-st)
             if plot_traj and len(res[0]) > 1:
                 t_str = str(round(t, 1))
-                plot_trajectories(plan_traj, sp, vicon_traj, state_traj, ground_truth=ground_truth, replan=replan, save_fig=save_traj, filename=result_dir+t_str)
+                plot_trajectories(plan_traj, sp, vicon_traj, state_traj, replan_state=replan_states, ground_truth=ground_truth, replan=replan, save_fig=save_traj, filename=result_dir+t_str)
 
             # sp.show(res[0], true_boxes=ground_truth)
             # plt.show()
@@ -195,7 +204,8 @@ def plan_loop():
             # print("action shpae", policy_before_trans.shape)
             policy = (np.array([[0,1],[-1,0]])@policy_before_trans.T).T
             prev_policy = policy
-            # print("policy: ", policy)
+
+            print("policy: ", policy)
             if replan:
                 end_idx = min(int(sp.sensor_dt/sp.dt),len(policy))
             else:
@@ -236,11 +246,24 @@ def plan_loop():
             plan_traj.pop()
             print("BREAK 1: FAILED TO FIND PLAN")
             # for step in range(int(sp.sensor_dt/sp.dt)):
-            # if len(prev_policy) > idx_prev+1:
-            #     idx_prev += 1
-            #     action = policy[step]
-            # else:
-            action = [0,0]
+
+            # apply the previous open loop policy for one time step
+            if len(prev_policy) > idx_prev+1:
+                idx_prev += 1
+                action = prev_policy[idx_prev]
+            else:
+                action = [0,0]
+            # print("ACTION", action)
+            # print("prev policy to end", prev_policy[idx_prev::])
+            # print("shape", len(prev_policy), len(prev_policy[idx_prev::]))
+
+            # apply small perturbation in action until plan is found
+            # small_actions = [[-0.2, 0], [0.2, 0], [0, 0.2], [0, -0.2]]
+            # sampled_ind = np.random.choice(np.arange(4))
+            # print("sampled action", small_actions[sampled_ind])
+            # go1.move(sampled_action[small_actions[sampled_ind]])
+
+            # use old open loop plan
             go1.move(action)
             time.sleep(sp.dt)
             t += sp.dt
@@ -251,7 +274,7 @@ def plan_loop():
 
     # print("res 2", res[2])
     if save_traj:
-        check_dir(result_dir)
+        # check_dir(result_dir)
         np.save(result_dir + 'plan.npy', res[0]) # initial open loop plan atm
         np.save(result_dir + 'state_traj.npy', state_traj)
         if vicon:
