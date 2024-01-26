@@ -28,10 +28,12 @@ try:
 except RuntimeError:
     pass
 
-f = open('planning/reachable_onespeed.pkl', 'rb')
+f = open('planning/reachable_10Hz.pkl', 'rb')
 reachable = pickle.load(f)
-f = open('planning/Pset_onespeed.pkl', 'rb')
+f = open('planning/Pset_10Hz.pkl', 'rb')
 Pset = pickle.load(f)
+dt = 0.1
+print("dt=", dt)
 
 # camera + 3DETR
 num_pc_points = 40000
@@ -58,8 +60,8 @@ with open("env_params.json", "r") as read_file:
     params = json.load(read_file)
 
 robot_radius = 0.3
-# cp = 0.02
-cp=0.4
+cp = 0.02
+# cp=0.4
 print("CP: ", cp)
 
 foldername = "../data/perception-guarantees/rooms_planning/"
@@ -83,7 +85,7 @@ def boxes_to_planner_frame(boxes, sp):
 
 def plan_env(task):
     # initialize planner
-    visualize = True
+    visualize = False
     task.goal_radius = 0.5
     filename = foldername + str(task.env) + '/cp' + str(cp)
     env = TaskEnv(render=visualize)
@@ -93,7 +95,7 @@ def plan_env(task):
     # task.init_state = [float(v) for v in init_state]
     # task.goal_loc = [float(v) for v in goal_loc]
     planner_init_state = [5,0.2,0,0]
-    sp = Safe_Planner(init_state=planner_init_state, FoV=60*np.pi/180, n_samples=2000,dt=0.1,radius = 0.1, sensor_dt=0.5)
+    sp = Safe_Planner(init_state=planner_init_state, FoV=60*np.pi/180, n_samples=2000,dt=dt,radius = 0.5, sensor_dt=0.5, max_search_iter=2000)
     sp.load_reachable(Pset, reachable)
     env.dt = sp.dt
     env.reset(task)
@@ -123,7 +125,7 @@ def plan_env(task):
             continue
             # plot_results(filename, state_traj , ground_truth, sp)
             # return {"trajectory": np.array(state_traj), "done": done, "collision": collided}
-        if (steps_taken % 10) == 0 and visualize:
+        if (steps_taken % 1) == 0 and visualize:
             # sp.show_connection(res[0]) 
             sp.world.free_space
             sp.show(res[0], true_boxes=np.array(ground_truth))
@@ -154,7 +156,7 @@ def plan_env(task):
                 state = env._state
                 state_traj.append(state_to_planner(state, sp))
                 t += sp.dt
-        if t >50:
+        if t >60:
             print("Env: ", str(task.env), " Failed")
             break
     plot_results(filename, state_traj , ground_truth, sp)
@@ -169,7 +171,7 @@ def plot_results(filename, state_traj , ground_truth, sp):
         ax.plot(state_tf[0, :], state_tf[1, :], c='r', linewidth=1, label='state')
         # ax.plot(state_tf[0,range(0,len(state_traj),int(sp.sensor_dt/sp.dt))], state_tf[1,range(0,len(state_traj),int(sp.sensor_dt/sp.dt))], 'co',label='replan')
     plt.legend()
-    # plt.savefig(filename + 'traj_plot_onespeed.png')
+    plt.savefig(filename + 'traj_plot_10Hz.png')
     # plt.show()
 
 def get_box(observation_, visualize = False):
@@ -371,7 +373,7 @@ if __name__ == '__main__':
     num_envs = 100
 
     # Number of parallel threads
-    num_parallel = 1
+    num_parallel = 10
     ##################################################################
 
     # _, _, _ = render_env(seed=0)
@@ -389,7 +391,7 @@ if __name__ == '__main__':
         # save_tasks += [task]
         env += 1 
         if env%batch_size == 0:
-            if env>44: # In case code stops running, change starting environment to last batch saved
+            if env >10: # In case code stops running, change starting environment to last batch saved
                 batch = math.floor(env/batch_size)
                 print("Saving batch", str(batch))
                 t_start = time.time()
@@ -400,23 +402,12 @@ if __name__ == '__main__':
                 pool.close()
                 pool.join()
                 # ipy.embed()
-                # results = results.get()
-                # if collided: 
-                #     collisions+=1
-                # if not done:
-                #     failed+=1
-                # save_res = save_res + results
-
                 ii = 0
                 for result in results.get():
                     # Save data
                     # file_batch = save_file[:-4] + str(batch) + ".npz"
-                    file_batch = foldername+ str(env-batch_size+ii) + "/cp_" + str(cp) + "_onespeed.npz"
+                    file_batch = foldername+ str(env-batch_size+ii) + "/cp_" + str(cp) + "_10Hz.npz"
                     print(file_batch)
-                    # np.savez_compressed(file_batch, data=result)
+                    np.savez_compressed(file_batch, data=result)
                     ii+=1
-                # print("Time to generate results: ", t_end - t_start)
-
-                # plan_env(task)
-                # t_end = time.time()
-                # print("Time to generate results: ", t_end - t_start)
+        # result = plan_env(task)

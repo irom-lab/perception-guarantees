@@ -9,11 +9,11 @@ import IPython as ipy
 import time
 import torch
 
-num_envs = 100
-cp = 0.02
-# cp = 0.4
+num_envs =100
+# cp = 0.02
+cp = 0.4
 foldername = "../data/perception-guarantees/rooms_planning/"
-filename = "cp_" + str(cp) + "_onespeed.npz"
+filename = "cp_" + str(cp) + "_10Hz.npz"
 traj = {}
 done= []
 coll = []
