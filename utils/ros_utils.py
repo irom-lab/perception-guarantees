@@ -85,17 +85,54 @@ class GroundTruthBB():
 
 
     def get_true_bb(self):
-        padding = 0.34
+        
         bb_list = []
+        bb_yaws = []
         for num in self.chair_numbers:
-            x, y = self.chair_states[num].x, self.chair_states[num].y
+            x, y, yaw = self.chair_states[num].x, self.chair_states[num].y, self.chair_states[num].yaw
             if (np.abs(x) < 0.001) and (np.abs(y) < 0.001):
                 continue
 
-            bb = [[x - padding, y - padding], [x + padding, y + padding]] 
-            bb_list.append(bb)
+            if num == 1:
+                padding = 0.35 # axis aligned padding val
+                padding_x = 0.25
+                padding_y = 0.25
+                
+            elif num == 2:
+                padding = 0.48
+                padding_x = 0.3
+                padding_y = 0.34
+            
+            elif num == 3 or num == 6 or num == 7:
+                padding = 0.43
+                padding_x = 0.3
+                padding_y = 0.3
 
-        return np.array(bb_list)
+            elif num == 4 or num == 5:
+                padding = 0.59
+                padding_x = 0.41
+                padding_y = 0.42
+            
+            elif num == 8:
+                padding = 0.29
+                padding_x = 0.2
+                padding_y = 0.18
+
+            elif num == 9:
+                padding = 0.38
+                padding_x = 0.28
+                padding_y = 0.22
+
+            elif num == 10:
+                padding = 0.41
+                padding_x = 0.28
+                padding_y = 0.29
+
+            bb = [[x - padding_x, y - padding_y], [x + padding_x, y + padding_x]] 
+            bb_list.append(bb)
+            bb_yaws.append(yaw)
+
+        return np.array(bb_list), np.array(bb_yaws)
 
         # # c1x, c1y = self.chair1_state.x, self.chair1_state.y
         # c2x, c2y = self.chair2_state.x, self.chair2_state.y

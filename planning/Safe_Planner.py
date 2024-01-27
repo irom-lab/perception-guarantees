@@ -84,8 +84,11 @@ class World:
         ax.set_ylim([0,self.h])
         ax.set_aspect('equal')
         if true_boxes is not None:
-            for box in true_boxes:
-                ax.add_patch(Rectangle((box[0,0],box[0,1]),box[1,0]-box[0,0],box[1,1]-box[0,1],edgecolor = 'k',fc=(1,0,0,0.8)))
+            boxes = true_boxes[0]
+            yaws = true_boxes[1]
+            for idx, box in enumerate(boxes):
+                angle_deg = yaws[idx] * (180 / np.pi) - 90 # convert to degrees and planner orientation
+                ax.add_patch(Rectangle((box[0,0],box[0,1]),box[1,0]-box[0,0],box[1,1]-box[0,1], angle=angle_deg, rotation_point='center', edgecolor = 'k',fc=(1,0,0,0.8)))
         if self.occ_space.geom_type == 'Polygon':
             self.occ_space = MultiPolygon([self.occ_space])
         for geom in self.occ_space.geoms:

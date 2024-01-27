@@ -7,7 +7,7 @@ from utils.go1_move import *
 from utils.plotting import *
 import time
 
-
+np.random.seed(0)
 def state_to_planner(state, sp):
     # convert robot state to planner coordinates
     return np.array([[[0,-1,0,0],[1,0,0,0],[0,0,0,-1],[0,0,1,0]]])@np.array(state) + np.array([sp.world.w/2,0,0,0])
@@ -54,19 +54,20 @@ def plan_loop():
     replan = True # set if want to just follow open loop plan
     save_traj = True  # set if want to save trajectory and compare against plan
     plot_traj = True  # set if want to visualize trajectory at the end of execution
-    result_dir = 'results/debug_trial2/' # set to unique trial identifier if saving results
+    result_dir = 'results/debug_trial1/' # set to unique trial identifier if saving results
     goal_forrestal = [7.0, -2.0, 0.0, 0.0] # goal in forrestal coordinates
     reachable_file = 'planning/pre_compute/reachable_10Hz.pkl'
     pset_file = 'planning/pre_compute/Pset_10Hz.pkl'
     num_samples = 2000  # number of samples used for the precomputed files
     dt = 0.1 #   planner dt
     radius = 0.7 # distance between intermediate goals on the frontier
-    chairs = [3]  # list of chair labels to be used to get ground truth bounding boxes
+    chairs = [1, 2, 4,5,6, 7, 10]  # list of chair labels to be used to get ground truth bounding boxes
     num_detect = 15  # number of boxes for 3DETR to detect
-    cp = 0.4 #1.19 #1.64
-    sensor_dt = 1.5 # time in seconds to replan
+    robot_radius = 0.14
+    cp = 0.73+robot_radius#1.19 #1.64
+    sensor_dt = 0.5 # time in seconds to replan
     num_times_detect = 1
-    max_search_iter = 300
+    max_search_iter = 2000
     # ****************************************************
     
     if save_traj:
@@ -105,7 +106,7 @@ def plan_loop():
     # print(go1.state)
     # time.sleep(2)
     time.sleep(dt)
-    chair_states_bb = chair_states.get_true_bb()
+    chair_states_bb, chair_yaws = chair_states.get_true_bb()
     ground_truth = boxes_to_planner_frame(chair_states_bb, sp)
     print("ground truth bb (planner coords): ", ground_truth, ground_truth.shape)
     
@@ -154,7 +155,7 @@ def plan_loop():
 
     # fig, ax = sp.world.show()
     # plt.show()
-
+    times_apply_old_plan = 0
     # ****************************************************
     # EXECUTION LOOP
     while True:
@@ -170,6 +171,7 @@ def plan_loop():
             # plan
             st = time.time()
             gs, _, yaw = go1.get_state()
+            state_traj.append(gs)
             state = state_to_planner(gs, sp)
             # start_idx = np.argmin(cdist(np.array(sp.Pset),state))
             replan_states.append([state[0, 0], state[0, 1]])
@@ -179,6 +181,9 @@ def plan_loop():
             boxes = boxes[:,:,0:2]
             # print("Boxes before planner transform ",  boxes)
             boxes = boxes_to_planner_frame(boxes, sp)
+            vicon_state, vicon_yaw, vicon_ts = go1.get_true_state()
+            # print("yaw", vicon_yaw)
+            vicon_traj.append(vicon_state)
             # print("Boxes after planner transform ",  boxes)
             res = sp.plan(state, boxes)
             plan_traj.append(res)
@@ -186,7 +191,7 @@ def plan_loop():
             t += (et-st)
             # if plot_traj and len(res[0]) > 1:
             #     t_str = str(round(t, 1))
-            #     plot_trajectories(plan_traj, sp, vicon_traj, state_traj, replan_state=replan_states, ground_truth=ground_truth, replan=replan, save_fig=save_traj, filename=result_dir+t_str)
+            #     plot_trajectories(plan_traj, sp, vicon_traj, state_traj, replan_state=replan_states, ground_truth=[ground_truth, chair_yaws], replan=replan, save_fig=save_traj, filename=result_dir+t_str)
 
             # sp.show(res[0], true_boxes=ground_truth)
             # plt.show()
@@ -204,7 +209,8 @@ def plan_loop():
             policy_before_trans = np.vstack(res[2])
             # print("action shpae", policy_before_trans.shape)
             policy = (np.array([[0,1],[-1,0]])@policy_before_trans.T).T
-            prev_policy = policy
+            prev_policy = np.copy(policy)
+            times_apply_old_plan = 0
 
             # print("policy: ", policy)
             if replan:
@@ -251,11 +257,19 @@ def plan_loop():
             # for step in range(int(sp.sensor_dt/sp.dt)):
 
             # apply the previous open loop policy for one time step
-            # if len(prev_policy) > idx_prev+1:
-            #     idx_prev += 1
-            #     action = prev_policy[idx_prev]
-            # else:
-            action = [0,0]
+            if (len(prev_policy) > idx_prev+1): #int(sp.sensor_dt/sp.dt):
+                times_apply_old_plan+=1
+                # for kk in range(int(sp.sensor_dt/sp.dt)):
+                idx_prev += 1
+                action = prev_policy[idx_prev]/4
+                go1.move(action)
+                time.sleep(sp.dt)
+                t += sp.dt
+            else:
+                action = [0,0]
+                go1.move(action)
+                time.sleep(sp.dt)
+                t += sp.dt
             # print("ACTION", action)
             # print("prev policy to end", prev_policy[idx_prev::])
             # print("shape", len(prev_policy), len(prev_policy[idx_prev::]))
@@ -267,9 +281,9 @@ def plan_loop():
             # go1.move(sampled_action[small_actions[sampled_ind]])
 
             # use old open loop plan
-            go1.move(action)
-            time.sleep(sp.dt)
-            t += sp.dt
+            # go1.move(action)
+            # time.sleep(sp.dt)
+            # t += sp.dt
         if t > 40:
             # time safety break
             print("BREAK 2: RAN OUT OF TIME")
@@ -287,7 +301,7 @@ def plan_loop():
     if plot_traj:
         # currently only set up for open loop init plan
         # TODO: handle plotting with replan
-       plot_trajectories(plan_traj, sp, vicon_traj, state_traj, ground_truth=ground_truth, replan=replan, save_fig=save_traj, filename=result_dir)
+       plot_trajectories(plan_traj, sp, vicon_traj, state_traj, ground_truth=[ground_truth, chair_yaws], replan=replan, save_fig=save_traj, filename=result_dir)
 
     if vicon:    
         rospy.spin()

@@ -24,7 +24,8 @@ from models.model_perception import MLPModelDet
 
 import IPython as ipy
 
-
+np.random.seed(0)
+torch.manual_seed(0)
 class Zed:
     def __init__(self,state_ic=[0.0,0.0,0.0,0.0], yaw_ic=0.0):
         # init camera
@@ -98,11 +99,11 @@ class Zed:
         self.num_pc_points = 40000
         self.pc = sl.Mat(res.width, res.height, sl.MAT_TYPE.F32_C4, sl.MEM.CPU)
         num_in = 32768
-        num_out = (5, 2,3) # bbox corner representation
+        num_out = (15, 2,3) # bbox corner representation
         self.model_cp = MLPModelDet(num_in, num_out)
         self.model_cp.to(self.device)
         # self.model_cp = torch.load('perception_model_finetune')
-        self.model_cp.load_state_dict(torch.load("perception_model_finetune"))
+        self.model_cp.load_state_dict(torch.load("perception_model"))
 
     def get_IMU(self):
         ts_handler = TimestampHandler()

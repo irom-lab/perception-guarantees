@@ -121,10 +121,10 @@ class Go1_move():
         bound = 0.8 # TODO: change back to 1
         ux = max(-bound, min(ux, bound))
         uy = max(-bound, min(uy, bound))
-        if np.abs(ux) < 0.2 and np.abs(ux) > 0.05:
-            ux = ux / np.abs(ux) * 0.2
-        if np.abs(uy) < 0.2 and np.abs(uy) > 0.05:
-            uy = uy / np.abs(uy) * 0.2
+        if np.abs(ux) < 0.2 and np.abs(ux) > 0.1:
+            ux = ux / np.abs(ux) * 0.15
+        if np.abs(uy) < 0.2 and np.abs(uy) > 0.1:
+            uy = uy / np.abs(uy) * 0.15
         
         yaw_cmd = self.correct_yaw() 
         if np.abs(yaw_cmd) > 0.15:
