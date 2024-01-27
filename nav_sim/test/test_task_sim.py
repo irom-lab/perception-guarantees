@@ -264,7 +264,7 @@ def get_box(pc_all, num_chairs, num_boxes):
 
     chair_prob = cls_prob[:,:,3]
     obj_prob = outputs["outputs"]["objectness_prob"].clone().detach().cpu()
-    sort_box = torch.sort(chair_prob,1,descending=True)
+    sort_box = torch.sort(obj_prob,1,descending=True)
 
     num_probs = 0
     # num_boxes = 15
@@ -405,7 +405,6 @@ def format_results(results):
         "gt": torch.zeros(num_envs, num_cam_positions, num_pred, 2, 3),
     }
     bboxes_ground_truth_aligned = torch.zeros(num_envs, num_chairs, 2,3)
-    bboxes_finetune = torch.zeros(num_envs, num_cam_positions, num_pred, 2, 3)
     for env, result in enumerate(results):
         loss_mask[env,:,:] = torch.from_numpy(results[env]["loss"]).float()
         model_outputs_all["box_features"][env,:,:,:] = results[env]["box_features"]
@@ -417,18 +416,21 @@ def format_results(results):
 
 def combine_old_files(filenames, num_files, num_envs_per_file):
     model_outputs_all = {"box_features": torch.tensor([]), "box_axis_aligned": torch.tensor([])}
+    match_outputs_gt = {"output": torch.tensor([]), "gt": torch.tensor([])}
     bboxes_ground_truth_aligned = torch.tensor([])
     loss_mask = torch.tensor([])
     for i in range(num_files):
         features = torch.load(filenames[0]+str(i+1) + ".pt")
         bboxes = torch.load(filenames[1]+str(i+1) + ".pt")
         loss = torch.load(filenames[2]+str(i+1) + ".pt")
+        finetune = torch.load(filenames[3]+str(i+1) + ".pt")
         model_outputs_all["box_features"] = torch.cat((model_outputs_all["box_features"], features["box_features"]))
-        # model_outputs_all["box_features"][(i)*num_envs_per_file:(i+1)*num_envs_per_file,:,:,:] =torch.clone(features["box_features"][(i)*num_envs_per_file:(i+1)*num_envs_per_file,:,:,:])
         model_outputs_all["box_axis_aligned"] = torch.cat((model_outputs_all["box_axis_aligned"], features["box_axis_aligned"]))
+        match_outputs_gt["output"] = torch.cat((match_outputs_gt["output"], finetune["output"]))
+        match_outputs_gt["gt"] = torch.cat((match_outputs_gt["gt"], finetune["gt"]))
         bboxes_ground_truth_aligned= torch.cat((bboxes_ground_truth_aligned, bboxes))
         loss_mask = torch.cat((loss_mask, loss))
-    return model_outputs_all, bboxes_ground_truth_aligned, loss_mask
+    return model_outputs_all, bboxes_ground_truth_aligned, loss_mask, match_outputs_gt
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -509,7 +511,7 @@ if __name__ == '__main__':
         # save_tasks += [task]
         env += 1 
         if env%batch_size == 0:
-            if env>0: # In case code stops running, change starting environment to last batch saved
+            if env>400: #410: # In case code stops running, change starting environment to last batch saved
                 batch = math.floor(env/batch_size)
                 print("Saving batch", str(batch))
                 t_start = time.time()
@@ -526,10 +528,10 @@ if __name__ == '__main__':
                 print("Time to generate results: ", t_end - t_start)
                 ###########################################################################
                 model_outputs_all, bboxes_ground_truth_aligned, loss_mask, match_outputs_gt = format_results(results)
-                torch.save(model_outputs_all, "data/dataset_intermediate/features15_prior"+str(batch) + ".pt")
-                torch.save(bboxes_ground_truth_aligned, "data/dataset_intermediate/bbox_labels15_prior"+str(batch) + ".pt")
-                torch.save(loss_mask, "data/dataset_intermediate/loss_mask15_prior"+str(batch) + ".pt")
-                torch.save(match_outputs_gt, "data/dataset_intermediate/finetune15_prior"+str(batch) + ".pt")
+                torch.save(model_outputs_all, "data/dataset_intermediate/features15_cal"+str(batch) + ".pt")
+                torch.save(bboxes_ground_truth_aligned, "data/dataset_intermediate/bbox_labels15_cal"+str(batch) + ".pt")
+                torch.save(loss_mask, "data/dataset_intermediate/loss_mask15_cal"+str(batch) + ".pt")
+                torch.save(match_outputs_gt, "data/dataset_intermediate/finetune15_cal"+str(batch) + ".pt")
 
             #     ii = 0
             #     for result in results.get():
@@ -543,16 +545,16 @@ if __name__ == '__main__':
             # save_tasks = []
     #################################################################
 
-    model_outputs_all, bboxes_ground_truth_aligned, loss_mask, match_outputs_gt = format_results(save_res)
-    # filenames = ["data/dataset_intermediate/features", "data/dataset_intermediate/bbox_labels", "data/dataset_intermediate/loss_mask"]
-    # model_outputs_all, bboxes_ground_truth_aligned, loss_mask = combine_old_files(filenames, 40, 10)
+    # model_outputs_all, bboxes_ground_truth_aligned, loss_mask, match_outputs_gt = format_results(save_res)
+    filenames = ["data/dataset_intermediate/features15_cal", "data/dataset_intermediate/bbox_labels15_cal", "data/dataset_intermediate/loss_mask15_cal", "data/dataset_intermediate/finetune15_cal"]
+    model_outputs_all, bboxes_ground_truth_aligned, loss_mask, match_outputs_gt = combine_old_files(filenames, 50, 10)
     ###########################################################################
     # # Save processed feature data
-    torch.save(model_outputs_all, "data/features15_prior.pt")
+    torch.save(model_outputs_all, "data/features15_cal.pt")
     # # Save ground truth bounding boxes
-    torch.save(bboxes_ground_truth_aligned, "data/bbox_labels15_prior.pt")
+    torch.save(bboxes_ground_truth_aligned, "data/bbox_labels15_cal.pt")
     # # Save loss mask
-    torch.save(loss_mask, "data/loss_mask15_prior.pt")
+    torch.save(loss_mask, "data/loss_mask15_cal.pt")
     # # Save all box outputs for finetuning
-    torch.save(match_outputs_gt, "data/finetune15_prior.pt")
+    torch.save(match_outputs_gt, "data/finetune15_cal.pt")
     ###########################################################################

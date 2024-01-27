@@ -46,8 +46,8 @@ def box_loss_diff(
     # Calculate volume of ground truth and predicted boxes
     vol_gt = torch.prod(corners_gt[:, :, :, 1, :][:,:,None,:] - corners_gt[:, :, :, 0, :][:,:,None,:], 4)
     idx = torch.where(vol_gt ==0)
-    loss_mask[idx[0],idx[1],idx[3]] = 0
-    vol_gt[idx] = 0.001
+    loss_mask[idx[0],idx[1],idx[3]] = 0.0 #torch.tensor(0, dtype=torch.float32)
+    vol_gt[idx] = 0.001 #torch.tensor(0.001, dtype=torch.float32)
     vol_pred = torch.prod(corners2_pred - corners1_pred, 4)
 
     # Calculate intersection between predicted and ground truth boxes

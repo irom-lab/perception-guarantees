@@ -61,8 +61,8 @@ class PointCloudDataset(Dataset):
         
         if self.is_finetune:
             # Get boxes for finetuning
-            all_labels = {'bboxes_gt': self.bbox_all[idx, :, :, :, :],
-                    'bboxes_3detr': self.bbox_gt[idx, :, :, :, :]}
+            all_labels = {'bboxes_3detr': self.bbox_all[idx, :, :, :, :],
+                    'bboxes_gt': self.bbox_gt[idx, :, :, :, :]}
 
             return features, labels, loss_mask, all_labels
         else:
