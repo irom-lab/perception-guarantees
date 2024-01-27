@@ -474,14 +474,14 @@ class Safe_Planner:
 
         # apply filter to update the world
         sense_range = state[0,1]+self.FoV_range*np.cos(self.FoV/2)
-        toofar = np.array([[[self.world_box[0,0],state[0,1]+sense_range],
+        toofar = np.array([[[self.world_box[0,0],sense_range],
                             [self.world_box[1,0],self.world_box[1,1]]]])
         tooclose = Polygon([[state[0,0]-self.FoV_close,state[0,1]-self.FoV_close],
                             [state[0,0]+self.FoV_close,state[0,1]-self.FoV_close],
                             [state[0,0]+self.FoV_close,state[0,1]+self.FoV_close],
                             [state[0,0]-self.FoV_close,state[0,1]+self.FoV_close],
                             [state[0,0]-self.FoV_close,state[0,1]-self.FoV_close]])
-        if state[0,1] + sense_range <= self.world_box[1,1]:
+        if sense_range <= self.world_box[1,1]:
             new_boxes = np.append(new_boxes,toofar,axis=0)
     
         self.world.update(new_boxes)
