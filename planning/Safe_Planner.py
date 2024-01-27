@@ -351,25 +351,59 @@ class Safe_Planner:
             self.goal_idx = subgoal_idxs[idx_incost]
             return self.Pset[subgoal_idxs[idx_incost]]
 
-    def occlusion(self, state):
-        '''Returns occlusion polygon'''
-        start =state[0,0:2]
-        world = LineString([[0,0],[0,self.world.h],[self.world.w,self.world.h],[self.world.w,0],[0,0]])
+    def occlusion(self, start):
+        '''returns free space polygon'''
 
-        frontier = find_frontier(self.world.occ_space, self.world_box, start, self.FoV)
-        rays = list(frontier.keys())
-        rays.sort()
-        ray_objects = []
-        for ray in rays:
-            ray_object = Ray(ray,frontier[ray])
-            ray_object.find_box(self.world.occ_space.geoms, frontier, world)
-            ray_objects.append(ray_object)
+        # find all edges
+        edges = []
+        for i in range(len(self.world.box_space.geoms)):
+            b = self.world.box_space.geoms[i].exterior.coords
+            edges += [LineString(b[k:k+2]) for k in range(len(b) - 1)]
+        # world boundary
+        world = LineString([[0,0],[0,self.world_box[1][1]],[self.world_box[1][0],self.world_box[1][1]],
+                            [self.world_box[1][0],0],[0,0]])
+        
+        # start occlusion algorithm
+        occlusion_space = self.world.box_space
+        for edge in edges:
+            world_intersects = []
+            vertices = []
+            for pt in edge.boundary.geoms:
+                angle = np.mod(np.arctan2(pt.y-start[1],pt.x-start[0]),2*np.pi)
+                ray_line = LineString([start[0:2],start[0:2]+12*np.array([np.cos(angle),np.sin(angle)])])
+                world_intersects.append(world.intersection(ray_line))
+                vertices.append(pt)
+            if (world_intersects[0].x != world_intersects[1].x and
+                world_intersects[0].y != world_intersects[1].y):
+                if world_intersects[0].x == 0 or world_intersects[1].x == 0:
+                    world_intersects.append(Point([0,8]))
+                elif world_intersects[0].x == 8 or world_intersects[1].x == 8:
+                    world_intersects.append(Point([8,8]))
+            # convex hull
+            occ = MultiPoint(vertices + world_intersects).convex_hull
+            if occ.geom_type == 'Polygon':
+                # fig, ax = self.world.show()
+                # ax.plot(*occ.exterior.xy)
+                # plt.show()
+                occlusion_space = occlusion_space.union(occ)
+        
+        # limited field of view
+        ray_left = LineString([start[0:2],start[0:2]+12*np.array([np.cos(np.pi/2+self.FoV/2),np.sin(np.pi/2+self.FoV/2)])])
+        ray_right = LineString([start[0:2],start[0:2]+12*np.array([np.cos(np.pi/2-self.FoV/2),np.sin(np.pi/2-self.FoV/2)])])
+        world_intersect_left = ray_left.intersection(world)
+        fov_v = [Point(start[0:2]),world_intersect_left]
+        if world_intersect_left.x != 0:
+            fov_v.append(Point([0,8]))
+        fov_v += [Point([0,0]),Point([8,0])]
+        world_intersect_right = ray_right.intersection(world)
+        if world_intersect_right.x != 8:
+            fov_v.append(Point([8,8]))
+        fov_v += [world_intersect_right, Point(start[0:2])]
 
-        vs = find_polygon(ray_objects, world)
-        if len(vs) >= 4:
-            return make_valid(Polygon(vs))
-        else:
-            return None
+        occlusion_space = occlusion_space.union(Polygon(fov_v))
+
+        world_polygon = Polygon([[0,0],[8,0],[8,8],[0,8],[0,0]])
+        return world_polygon.difference(occlusion_space)
 
     # plots
     def plot_reachable(self, direction):
