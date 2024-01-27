@@ -280,16 +280,16 @@ def find_frontier(xbar_now, world_box, start, FoV, polygon=False):
     vertex_rays = {'left':ray_left,'right':ray_right}
     rays = []
     frontier = {}
+    ray_endbox = {}
+    ray_startbox = {}
     scaling = np.linalg.norm(world_box[0]-world_box[1])
     
     world_vertices = [world_box[0],np.array([world_box[1][0],world_box[0][1]]),world_box[1],np.array([world_box[0][0],world_box[1][1]])]
     world_edges = np.array([[world_vertices[i],world_vertices[(i+1)%4]] for i in range(4)])
     
-    # create {box: 4 vertices}
     # find all rays corresponding to all vertices
     for i in range(len(xbar_now.geoms)):
         obstacle = xbar_now.geoms[i]
-        # vertices = [obstacle[0],np.array([obstacle[1][0],obstacle[0][1]]),obstacle[1],np.array([obstacle[0][0],obstacle[1][1]])]
         vertx,verty = obstacle.exterior.xy
         box_vertices[i] = np.array([vertx,verty]).T
         for j in range(len(vertx)):
@@ -297,6 +297,7 @@ def find_frontier(xbar_now, world_box, start, FoV, polygon=False):
             ray = np.mod(np.arctan2(vertex[1]-start[1],vertex[0]-start[0]),2*np.pi)
             if ray_right <= ray <= ray_left: # vertex is in FoV
                 vertex_rays[vertex.tobytes()] = ray
+                ray_endbox[ray] = i
     # discard rays in the way
     for vert, ray in vertex_rays.items():
         show = True
@@ -307,22 +308,20 @@ def find_frontier(xbar_now, world_box, start, FoV, polygon=False):
         ray_line = np.array([start[0:2],start[0:2]+scaling*np.array([np.cos(ray),np.sin(ray)])])
         
         segments = []
+        # find intersection with world boundary
         for world_edge in world_edges:
             if intersect(world_edge[0],world_edge[1],ray_line[0],ray_line[1]):
                 intersection = line_intersection(world_edge, ray_line)
                 segment = np.array([vertex, intersection])
-        if np.linalg.norm(segment[0]-segment[1]) < 1e-5:
-            segment = np.array([vertex-np.array(1e-5*np.cos(ray),1e-5*np.sin(ray)), 
-                                intersection+1e-5*np.array([np.cos(ray),np.sin(ray)])])
-        segments.append(segment)
+                if np.linalg.norm(segment[0]-segment[1]) < 1e-5:
+                    segment = np.array([vertex-np.array(1e-5*np.cos(ray),1e-5*np.sin(ray)), 
+                                        intersection+1e-5*np.array([np.cos(ray),np.sin(ray)])])
+                segments.append(segment)
 
         # for this ray, look at each box
         for box, vertices in box_vertices.items():
-            # edges =np.array([[vertices[i],vertices[(i+1)%4]] for i in range(4)])
-            # print("X_bar now (utils/find_frontier): ", xbar_now.geoms[box].geom_type)
             if xbar_now.geoms[box].geom_type != 'Polygon':
                 continue
-            # b = xbar_now.geoms[box].boundary.coords
             b = xbar_now.geoms[box].exterior.coords
             edges = [LineString(b[k:k+2]) for k in range(len(b) - 1)]
             if np.any(abs(vertices - vertex)<1e-5): # same box
@@ -333,6 +332,7 @@ def find_frontier(xbar_now, world_box, start, FoV, polygon=False):
                         continue
                     else:
                         if intersect(edge[0],edge[1],ray_line[0],ray_line[1]):
+                            intersection = line_intersection(edge, ray_line)
                             show = False
             else: # different box
                 # discard rays blocked by other boxes
@@ -357,7 +357,7 @@ def find_frontier(xbar_now, world_box, start, FoV, polygon=False):
             frontier[ray] = segments[np.argmin(segments_len)]
             
     if polygon:
-        return frontier, box_vertices
+        return frontier, ray_startbox, ray_endbox
     else:
         return frontier
 
@@ -388,59 +388,50 @@ def plot_frontier(occ_space, world_box, start, FoV,radius):
     plt.show()
 
 # OCCLUSION FUNCTIONS
-def trace_polygon(ray1_, ray2_, same_box, world):
-    box_x,box_y = same_box.coords.xy
-    # find indices where each ray intersects with box
-    ray1_x_inter = np.where(abs(np.array(box_x) - ray1_[0])<1e-5)[0]
-    ray1_y_inter = np.where(abs(np.array(box_y) - ray1_[1])<1e-5)[0]
-    ray2_x_inter = np.where(abs(np.array(box_x) - ray2_[0])<1e-5)[0]
-    ray2_y_inter = np.where(abs(np.array(box_y) - ray2_[1])<1e-5)[0]
     
-    box_start_idx = None
-    box_end_idx = None
-
-    if len(ray1_x_inter) != 0 and len(ray1_y_inter) == 0: # vertical middle
-        # consecutive indices means ray is inbetween the two vertices
-        start_idx = np.where(np.diff(ray1_x_inter) == 1)[0]+1
+def find_box_idx(ray_x_inter,ray_y_inter,ray_,box_x,box_y):
+    box_idx = None
+    if len(ray_x_inter) != 0 and len(ray_y_inter) == 0: # vertical middle
+    # consecutive indices means ray is inbetween the two vertices
+        start_idx = np.where(np.diff(ray_x_inter) == 1)[0]+1
         for i in start_idx:
             # check if ray1_y is inbetween the two vertices
-            if (box_y[ray1_x_inter[i]] <= ray1_[1] <= box_y[ray1_x_inter[i]-1] or 
-                box_y[ray1_x_inter[i]-1] <= ray1_[1] <= box_y[ray1_x_inter[i]]):
-                box_start_idx = ray1_x_inter[i]
+            if (box_y[ray_x_inter[i]] <= ray_[1] <= box_y[ray_x_inter[i]-1] or 
+                box_y[ray_x_inter[i]-1] <= ray_[1] <= box_y[ray_x_inter[i]]):
+                box_idx = ray_x_inter[i]
                 break
-    elif len(ray1_y_inter) != 0 and len(ray1_x_inter) == 0: # horizontal middle
-        start_idx = np.where(np.diff(ray1_y_inter) == 1)[0]+1
+    elif len(ray_y_inter) != 0 and len(ray_x_inter) == 0: # horizontal middle
+        start_idx = np.where(np.diff(ray_y_inter) == 1)[0]+1
         for i in start_idx:
-            if (box_x[ray1_y_inter[i]] <= ray1_[0] <= box_x[ray1_y_inter[i]-1] or 
-                box_x[ray1_y_inter[i]-1] <= ray1_[0] <= box_x[ray1_y_inter[i]]):
-                box_start_idx = ray1_y_inter[i]
+            if (box_x[ray_y_inter[i]] <= ray_[0] <= box_x[ray_y_inter[i]-1] or 
+                box_x[ray_y_inter[i]-1] <= ray_[0] <= box_x[ray_y_inter[i]]):
+                box_idx = ray_y_inter[i]
                 break
-    elif len(ray1_y_inter) != 0 and len(ray1_x_inter) != 0: # corner
-        box_start_idx = list(set(ray1_x_inter).intersection(ray1_y_inter))[0]
+    elif len(ray_y_inter) != 0 and len(ray_x_inter) != 0: # corner
+        box_idx = list(set(ray_x_inter).intersection(ray_y_inter))[0]
+    return box_idx
+
+def trace_polygon(ray1_, ray2_, same_box, world):
+    box_x,box_y = same_box.coords.xy
+
+    # find indices where each ray intersects with box
+    ray1_x_inter = np.where(abs(np.array(box_x) - ray1_[0])<1e-2)[0]
+    ray1_y_inter = np.where(abs(np.array(box_y) - ray1_[1])<1e-2)[0]
+    ray2_x_inter = np.where(abs(np.array(box_x) - ray2_[0])<1e-2)[0]
+    ray2_y_inter = np.where(abs(np.array(box_y) - ray2_[1])<1e-2)[0]
     
-    # repeat for ray2
-    if len(ray2_x_inter) != 0 and len(ray2_y_inter) == 0:
-        end_idx = np.where(np.diff(ray2_x_inter) == 1)[0]+1
-        for i in end_idx:
-            if (box_y[ray2_x_inter[i]] <= ray2_[1] <= box_y[ray2_x_inter[i]-1] or 
-                box_y[ray2_x_inter[i]-1] <= ray2_[1] <= box_y[ray2_x_inter[i]]):
-                box_end_idx = ray2_x_inter[i]
-                break
-    elif len(ray2_y_inter) != 0 and len(ray2_x_inter) == 0:
-        end_idx = np.where(np.diff(ray2_y_inter) == 1)[0]+1
-        for i in end_idx:
-            if (box_x[ray2_y_inter[i]] <= ray2_[0] <= box_x[ray2_y_inter[i]-1] or 
-                box_x[ray2_y_inter[i]-1] <= ray2_[0] <= box_x[ray2_y_inter[i]]):
-                box_end_idx = ray2_y_inter[i]
-                break
-    elif len(ray2_y_inter) != 0 and len(ray2_x_inter) != 0:
-        box_end_idx = list(set(ray2_x_inter).intersection(ray2_y_inter))[0]
+    box_start_idx = find_box_idx(ray1_x_inter,ray1_y_inter,ray1_,box_x,box_y)
+    box_end_idx = find_box_idx(ray2_x_inter,ray2_y_inter,ray2_,box_x,box_y)
+    
+    print(ray1_x_inter,ray1_y_inter,ray2_x_inter,ray2_y_inter)
+    print(box_start_idx,box_end_idx)
+    # if box2 is not None:
+    #     print(middle_start_idx,middle_end_idx)
 
     if box_start_idx is None or box_end_idx is None:
         return None
     else:
         if box_start_idx > box_end_idx and same_box==world:
-            # print('problem?',np.array(same_box.coords.xy).T[box_start_idx-1:box_end_idx-1:-1])
             return np.array(same_box.coords.xy).T[box_start_idx-1:box_end_idx-1:-1]
         elif box_start_idx > box_end_idx:
             return np.hstack((
@@ -448,6 +439,7 @@ def trace_polygon(ray1_, ray2_, same_box, world):
                 np.array(same_box.coords.xy)[:,1:box_end_idx])).T
         else:
             return np.array(same_box.coords.xy)[:,box_start_idx:box_end_idx].T
+
 
 def find_polygon(ray_objects, world): 
     
@@ -458,41 +450,80 @@ def find_polygon(ray_objects, world):
         ray2 = ray_objects[i+1]
         # print(ray1.start_box, ray1.end_box, ray2.start_box, ray2.end_box, 'box finding in utils/find_polygon')
         
-        if ray1.end_box == ray2.end_box and (ray1.start_box != ray2.start_box or
-                                             ray1.start_box == ray2.start_box == LineString([[0,0],[0,0]])):
-            v_bet = trace_polygon(ray1.end,ray2.end,ray1.end_box, world)
-            if v_bet is not None:
-                for v in v_bet:
-                    vs.append(v)
-                vs.append(ray2.end)
-                vs.append(ray2.start)
+        if ray1.end_box == ray2.end_box:
+            if (ray1.start_box != ray2.start_box or
+                ray1.start_box == ray2.start_box == LineString([[0,0],[0,0]]) or
+                ray1.angle > np.pi/2 or ray2.angle< np.pi/2):
+                v_bet = trace_polygon(ray1.end,ray2.end,ray1.end_box, world)
+                if v_bet is not None:
+                    for v in v_bet:
+                        vs.append(v) if any(v != vs[-1]) else vs
+                vs.append(ray2.end) if any(ray2.end != vs[-1]) else vs
+                vs.append(ray2.start) if any(ray2.start != vs[-1]) else vs
+                print('end=end,1',ray1.start_box != ray2.start_box,ray1.start_box == ray2.start_box == LineString([[0,0],[0,0]]),ray1.angle > np.pi/2 or ray2.angle< np.pi/2)
+            else:
+                if ray1.start_box == ray2.start_box:
+                    vs.append(ray1.end) if all(ray1.end != vs[-1]) else vs
+                    vs.append(ray1.start) if all(ray1.start != vs[-1]) else vs
+                    v_bet = trace_polygon(ray1.start,ray2.start,ray1.end_box, world)
+                    if v_bet is not None:
+                        for v in v_bet:
+                            vs.append(v) if all(v != vs[-1]) else vs
+                    vs.append(ray2.start) if all(ray2.start != vs[-1]) else vs
+                    vs.append(ray2.end) if all(ray2.end != vs[-1]) else vs
+                    print('end=end,3, vs',vs)
+                elif ray1.start_box == ray1.end_box:
+                    vs.append(ray1.end) if all(ray1.end != vs[-1]) else vs
+                    v_bet = trace_polygon(ray1.start,ray2.end,ray1.end_box, world)
+                    if v_bet is not None:
+                        for v in v_bet:
+                            vs.append(v) if all(v != vs[-1]) else vs
+                    vs.append(ray2.end) if all(ray2.end != vs[-1]) else vs
+                    vs.append(ray2.start) if all(ray2.start != vs[-1]) else vs
+                    print('end=end,2.2, vs',vs)
+                elif ray2.start_box == ray2.end_box:
+                    v_bet = trace_polygon(ray1.end,ray2.start,ray2.end_box, world)
+                    if v_bet is not None:
+                        for v in v_bet:
+                            vs.append(v) if all(v != vs[-1]) else vs
+                    vs.append(ray2.start) if all(ray2.start != vs[-1]) else vs
+                    vs.append(ray2.end) if all(ray2.end != vs[-1]) else vs
+                    print('end=end,2.1, vs',vs)
+
         elif ray1.start_box == ray2.start_box:
             # print('ray1 start = ray2 start')
             if ray1.start_box != LineString([[0,0],[0,0]]):
                 v_bet = trace_polygon(ray1.start,ray2.start,ray1.start_box, world)
                 if v_bet is not None:
+                    print('start=start, v_bet',v_bet)
                     for v in v_bet:
                         vs.append(v)
                     vs.append(ray2.start)
                     vs.append(ray2.end)
             else:
                 # both start at origin, but different end boxes
-                print('both start at origin, but different end boxes')
+                v_bet = trace_polygon(ray1.end,ray2.end,ray1.end_box, world, box2 = ray2.end_box)
+                if v_bet is not None:
+                    print('both start at origin, but different end boxes, v_bet',v_bet)
+                    for v in v_bet:
+                        vs.append(v)
+                    vs.append(ray2.end)
+                    vs.append(ray2.start)
         elif ray1.start_box == ray2.end_box:
-            # print('ray1 start = ray2 end')
-            v_bet = trace_polygon(ray1.start,ray2.end,ray1.start_box, world)
+            v_bet = trace_polygon(ray1.start,ray2.start,ray1.end_box, world)
             if v_bet is not None:
+                print('ray1 start = ray2 end, v_bet',v_bet)
                 for v in v_bet:
                     vs.append(v)
                 vs.append(ray2.end)
                 vs.append(ray2.start)
         elif ray1.end_box == ray2.start_box:
-            # print('ray1 end = ray2 start')
             v_bet = trace_polygon(ray1.end,ray2.start,ray1.end_box, world)
             if v_bet is not None:
+                print('ray1 end = ray2 start, v_bet',v_bet)
                 for v in v_bet:
                     vs.append(v)
                 vs.append(ray2.start)
                 vs.append(ray2.end)
-
+    print(vs)
     return vs
