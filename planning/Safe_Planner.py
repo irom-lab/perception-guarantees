@@ -12,43 +12,10 @@ import pickle
 from shapely.geometry import Point, MultiPolygon, Polygon, LineString, MultiPoint
 from shapely.ops import unary_union
 from shapely.geometry.polygon import orient
-from shapely.validation import make_valid
-from planning.utils import turn_box, non_det_filter, filter_reachable, show_trajectory, find_frontier, find_candidates, gen_trajectory, gen_path, trace_polygon, find_polygon
+from planning.utils import turn_box, non_det_filter, filter_reachable
 
 [k1, k2, A, B, R, BRB] = pickle.load(open('planning/sp_var.pkl','rb'))
 
-
-class Ray:
-    def __init__(self, angle, vert):
-        self.start = vert[0]
-        self.end = vert[1]
-        self.angle = angle
-    def find_box(self, geoms, frontier, world):
-        buffer = 2e-5 
-        self.start_box = LineString([[0,0],[0,0]])
-        self.end_box = LineString([[0,0],[0,0]])
-        ab = LineString(frontier[self.angle])
-        x = ab.intersection(world)
-        if not x.is_empty:
-            self.end_box = world
-        for geom in geoms:
-            geom_buff = geom.buffer(buffer)
-
-            x1 = ab.intersection(geom)
-            x2 = ab.intersection(geom_buff)
-            if not x1.is_empty:
-                x_coords = np.array([x1.coords.xy[0][0],x1.coords.xy[1][0]])
-                if np.all(abs(self.start-x_coords)<buffer):
-                    self.start_box = geom.exterior
-                elif np.all(abs(self.end-x_coords)<buffer):
-                    self.end_box = geom.exterior
-            elif not x2.is_empty:
-                x_coords = np.array([x2.coords.xy[0][0],x2.coords.xy[1][0]])
-                if np.all(abs(self.start-x_coords)<buffer):
-                    self.start_box = geom.exterior
-                elif np.all(abs(self.end-x_coords)<buffer):
-                    self.end_box = geom.exterior
-            
 class World:
     def __init__(self, world_box):
         self.w = world_box[1,0] - world_box[0,0]
@@ -60,21 +27,26 @@ class World:
 
     def update(self, new_boxes):
         '''Applies nondeterministic filter to update estimate of occupancy space'''
-        # new_occ_space = np.array(new_boxes)
-        # if self.counter == 0:
-        #     self.box_space = unary_union(turn_box(new_boxes[0:-1]))
-        # else:
-        #     self.box_space = non_det_filter(self.box_space, new_occ_space)
+        new_occ_space = np.array(new_boxes)
+        if self.counter == 0:
+            self.box_space = unary_union(turn_box(new_boxes))
+        else:
+            self.box_space = non_det_filter(self.box_space, new_occ_space)
         self.occ_space = unary_union(turn_box(new_boxes))
-
+        # self.box_space = Polygon([[0,0],[0,self.h],[self.w,self.h],[self.w,0],[0,0]]).intersection(self.box_space)
+        world_polygon = Polygon([[0,0],[8,0],[8,8],[0,8],[0,0]])
+        self.box_space = world_polygon.intersection(self.box_space)
         if self.occ_space.geom_type == 'Polygon':
             self.occ_space = MultiPolygon([self.occ_space])
-        # if self.box_space.geom_type == 'Polygon':
-        #     self.box_space = MultiPolygon([self.box_space])
+        if self.box_space.geom_type == 'Polygon':
+            self.box_space = MultiPolygon([self.box_space])
 
         self.occ_space.simplify(1e-5)
         self.occ_space = MultiPolygon([orient(s, sign=-1.0) for s in self.occ_space.geoms if s.geom_type == 'Polygon'])
         
+        self.box_space.simplify(1e-3)
+        self.box_space = MultiPolygon([orient(s, sign=-1.0) for s in self.box_space.geoms if s.geom_type == 'Polygon'])
+
         self.counter += 1
 
     def isValid(self, state):
@@ -93,7 +65,16 @@ class World:
         new_state = expm(A*10**3)@state
         if self.isValid(new_state):
             return True
-        return False
+
+        # x_brake = state[2]/k1
+        # y_brake = state[3]/k2
+        # x_brake = 0.5/k1#+0.5
+        # y_brake = 0.5/k2#+0.5 # 0.5 is approximate state estimation error
+        # new_state = np.array([state[0]+x_brake, state[1]+y_brake,0,0])
+        # if self.isValid(new_state):
+        #     return True
+        # return False
+        # return False
 
     def show(self, true_boxes = None):
         '''Plot occupied space'''
@@ -109,12 +90,13 @@ class World:
         for geom in self.occ_space.geoms:
             xs, ys = geom.exterior.xy
             ax.fill(xs,ys, fc=(1,0,0,0.3))
+        for geom in self.box_space.geoms:
+            xs, ys = geom.exterior.xy
+            ax.fill(xs,ys, fc=(1,1,0,0.9))
         if self.free_space_new is not None:
             if self.free_space_new.geom_type == 'Polygon':
                 xs, ys = self.free_space_new.exterior.xy
                 ax.fill(xs,ys, edgecolor = 'k', linestyle='--', fc = (0,0,0,0))
-            elif self.free_space_new.geom_type == 'LineString':
-                print('plotting problem:', self.free_space_new.geom_type)
             else:
                 for geom in self.free_space_new.geoms:
                     if geom.geom_type == 'Polygon':
@@ -132,14 +114,6 @@ class World:
                     ax.fill(xs,ys, edgecolor = 'k',fc=(0, 0.4470, 0.7410,0.5))
             else:
                 print(self.free_space.geom_type)
-        return fig, ax
-
-    def show_occlusion(self,polygons):
-        fig, ax = self.show()
-        ax.set_xlim([0,self.w])
-        ax.set_ylim([0,self.h])
-        for polygon in polygons:
-            ax.fill(polygon[0],polygon[1],edgecolor = 'None',alpha=0.5)
         return fig, ax
 
 class Safe_Planner:
@@ -173,7 +147,6 @@ class Safe_Planner:
         self.world = World(world_box)
         self.goal_f = goal_f
         self.goal = self.state_to_planner(self.goal_f)
-
 
         self.world.free_space = Polygon(((init_state[0]-sr, init_state[1]-sr),
                                          (init_state[0]-sr, init_state[1]+sr),
@@ -211,7 +184,6 @@ class Safe_Planner:
         origin_shift = np.atleast_2d(np.array([self.world.w/2,0,0,0]))
 
         state_tf = (np.array([[[0,-1,0,0],[1,0,0,0],[0,0,0,-1],[0,0,1,0]]]) @ state.T + origin_shift.T)
-
         return state_tf.squeeze()
 
     # preparation
@@ -341,6 +313,8 @@ class Safe_Planner:
                     dist_to_go = np.linalg.norm(np.array(subgoal[0:2])-np.array(self.goal[0:2]))
                 else:
                     dist_to_go = np.inf
+                if dist_to_go <= 1: #goal radius
+                    dist_to_go = 0
                 # append
                 costs.append(cost_to_come + self.weight*dist_to_go/v)
         # print('costs: ', costs)
@@ -404,6 +378,7 @@ class Safe_Planner:
 
         world_polygon = Polygon([[0,0],[8,0],[8,8],[0,8],[0,0]])
         return world_polygon.difference(occlusion_space)
+
 
     # plots
     def plot_reachable(self, direction):
@@ -489,14 +464,13 @@ class Safe_Planner:
             axs[2,1].plot(t_array, res[1][i][:,1],'k-')
         plt.show()
 
-    def check_collision(self,node_idx):
-            state = self.Pset[node_idx]
-            self.bool_valid[node_idx] = self.world.free_space.buffer(1e-5).contains(Point(state[0],state[1]))
-
     # safety planning algorithm
     def plan(self, state, new_boxes):
         #plan at new sensor time step when we get new boxes
         start = tm.time()
+
+        if state.shape == (4,):
+            state = state.reshape(1,4)
 
         # apply filter to update the world
         sense_range = state[0,1]+self.FoV_range*np.cos(self.FoV/2)
@@ -509,12 +483,11 @@ class Safe_Planner:
                             [state[0,0]-self.FoV_close,state[0,1]-self.FoV_close]])
         if state[0,1] + sense_range <= self.world_box[1,1]:
             new_boxes = np.append(new_boxes,toofar,axis=0)
-        
+    
         self.world.update(new_boxes)
-
         # occlusion
         if self.world.occ_space.contains(Point(state[0,0],state[0,1])) == False:
-            self.world.free_space_new = self.occlusion(state)
+            self.world.free_space_new = self.occlusion(state[0])
             if self.world.free_space_new is not None:
                 self.world.free_space_new = self.world.free_space_new.difference(tooclose)
                 if self.world.free_space_new.is_valid:            
@@ -547,7 +520,6 @@ class Safe_Planner:
 
         # solve
         goal_flag = self.build_tree(start_idx)
-
         self.goal_explored = []
         if goal_flag == 1:
             idx_solution, _ = self.solve(start_idx)
@@ -557,16 +529,15 @@ class Safe_Planner:
                 if goal_loc is None or self.goal_idx == self.n_samples:
                     goal_flag = -1
                     idx_solution = [self.goal_idx]
-                    # print('planning failed, stay')
+                    print('planning failed, stay')
                     break
                 else:
                     self.goal_explored.append(self.Pset[self.goal_idx][0:2])
-                    # print('intermediate goal: ', self.Pset[self.goal_idx])
+                    print('intermediate goal: ', self.Pset[self.goal_idx])
 
                     if self.bool_unvisit[self.goal_idx]==False:
                         idx_solution, _ = self.solve(start_idx)
                         break
-  
 
         # output controls
         x_waypoints = []
@@ -579,7 +550,7 @@ class Safe_Planner:
             u_waypoints.append(u_waypoint)
 
         end = tm.time()
-        # print('planning time: ', end-start)
+        print('planning time: ', end-start)
         return idx_solution, x_waypoints, u_waypoints
 
     def build_tree(self, start_idx):
@@ -590,6 +561,7 @@ class Safe_Planner:
             if not self.bool_unvisit[self.goal_idx]: # goal node is visited
                 goal_flag = 1
                 break
+        # print('num_iteration:', self.itr)
         self.itr=1
         return goal_flag
 
@@ -609,55 +581,55 @@ class Safe_Planner:
 
     def extend(self):
         '''Inner loop of FMT*'''
-
         self.itr += 1
 
         # check nodes are collision-free
-        idxset_open = np.where(self.bool_open & self.bool_valid)[0] # H
+        self.idxset_open = np.where(self.bool_open & self.bool_valid)[0] # H
         idxset_unvisit = np.where(self.bool_unvisit & self.bool_valid)[0] # W
-        if idxset_open.size != 0:
-            idx_lowest = idxset_open[np.argmin(self.cost[idxset_open])] # z <- argmin cost(y)
+        if self.idxset_open.size != 0:
+            idx_lowest = self.idxset_open[np.argmin(self.cost[self.idxset_open])] # z <- argmin cost(y)
 
             R_plus = self.reachable[idx_lowest][1][0]
             idxset_near = list(set(R_plus) & set(idxset_unvisit)) # X_near <- R+(z) \cap W
-
             # for x in X_near
             for idx_near in idxset_near:
-                # Y_near <- R-(x) \cap H
-                R_minus = self.reachable[idx_near][2]
-                idxset_cand = list(set(R_minus[0]) & set(idxset_open)) #index in Pset
-                idxset_inR = np.where(np.isin(R_minus[0], idxset_cand))[0]
-                distset_cand = np.array(R_minus[1])[idxset_inR]
-                timeset_cand = np.array(R_minus[2])[idxset_inR]
-
-
-                if len(idxset_cand) == 0:
-                    continue
-
-                # ymin <- argmin cost(y) + dist(y,x)
-                idx_incand_costmin = np.argmin(self.cost[idxset_cand] + distset_cand) #index in cand set
-                cost_new = min(self.cost[idxset_cand] + distset_cand)
-                time_new = timeset_cand[idx_incand_costmin]
-                idx_parent = idxset_cand[idx_incand_costmin]
-                idx_nearinparentfset = self.reachable[idx_parent][1][0].index(idx_near)
-                x_waypoints = self.reachable[idx_parent][1][3][idx_nearinparentfset][0]
-
-                # check trajectory is collision-free
-                if self.world.isValid_multiple(x_waypoints):
-                    # check ICS before sensor update
-                    if (self.time_to_come[idx_parent] + time_new <= self.sensor_dt
-                        and self.world.isICSfree(self.Pset[idx_near])):
-                        self.connect(idx_near,cost_new,time_new,idx_parent)
-                    elif self.time_to_come[idx_parent] + time_new > self.sensor_dt:
-                        self.connect(idx_near,cost_new,time_new,idx_parent)
-                    self.connect(idx_near,cost_new,time_new,idx_parent)
-
+                self.process_idx(idx_near)
+                
             self.bool_open[idx_lowest] = False
             self.bool_closed[idx_lowest] = True
 
         return self
 
+    def process_idx(self, idx_near):
+        R_minus = self.reachable[idx_near][2]
+        idxset_cand = list(set(R_minus[0]) & set(self.idxset_open)) #index in Pset
+        idxset_inR = np.where(np.isin(R_minus[0], idxset_cand))[0]
+        distset_cand = np.array(R_minus[1])[idxset_inR]
+        timeset_cand = np.array(R_minus[2])[idxset_inR]
+
+        if len(idxset_cand) == 0:
+            pass
+
+        # ymin <- argmin cost(y) + dist(y,x)
+        idx_incand_costmin = np.argmin(self.cost[idxset_cand] + distset_cand) #index in cand set
+        cost_new = min(self.cost[idxset_cand] + distset_cand)
+        time_new = timeset_cand[idx_incand_costmin]
+        idx_parent = idxset_cand[idx_incand_costmin]
+        idx_nearinparentfset = self.reachable[idx_parent][1][0].index(idx_near)
+        x_waypoints = self.reachable[idx_parent][1][3][idx_nearinparentfset][0]
+        
+        # check trajectory is collision-free
+        if self.world.isValid_multiple(x_waypoints):
+            # check ICS before sensor update
+            if (self.time_to_come[idx_parent] + time_new <= self.sensor_dt
+                and self.world.isICSfree(self.Pset[idx_near])):
+                self.connect(idx_near,cost_new,time_new,idx_parent)
+            elif self.time_to_come[idx_parent] + time_new > self.sensor_dt:
+                self.connect(idx_near,cost_new,time_new,idx_parent)
+
+
     def connect(self,idx_near, cost_new, time_new, idx_parent):
+        # print("connect")
         self.bool_unvisit[idx_near] = False
         self.bool_open[idx_near] = True
         self.cost[idx_near] = cost_new
