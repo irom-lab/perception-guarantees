@@ -187,7 +187,6 @@ class Safe_Planner:
         origin_shift = np.atleast_2d(np.array([self.world.w/2,0,0,0]))
 
         state_tf = (np.array([[[0,-1,0,0],[1,0,0,0],[0,0,0,-1],[0,0,1,0]]]) @ state.T + origin_shift.T)
-
         return state_tf.squeeze()
 
     # preparation
@@ -317,7 +316,7 @@ class Safe_Planner:
                     dist_to_go = np.linalg.norm(np.array(subgoal[0:2])-np.array(self.goal[0:2]))
                 else:
                     dist_to_go = np.inf
-                if dist_to_go <= self.radius:
+                if dist_to_go <= 1: #goal radius
                     dist_to_go = 0
                 # append
                 costs.append(cost_to_come + self.weight*dist_to_go/v)
@@ -565,7 +564,7 @@ class Safe_Planner:
             if not self.bool_unvisit[self.goal_idx]: # goal node is visited
                 goal_flag = 1
                 break
-        print('num_iteration:', self.itr)
+        # print('num_iteration:', self.itr)
         self.itr=1
         return goal_flag
 
