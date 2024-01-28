@@ -123,7 +123,8 @@ def process_mesh(category_all, task_id, args):
     piece_saved_bounds = []
     piece_id_all = []
     piece_pos_all = []
-    while num_furniture_saved < args.num_furniture_per_room:
+    num_furniture = np.random.randint(args.num_furniture_per_room)+1
+    while num_furniture_saved < num_furniture:
         category_chosen = random.choice(list(category_all.keys()))
         num_piece_category_available = len(category_all[category_chosen])
         model_id = category_all[category_chosen][
@@ -198,7 +199,7 @@ def process_mesh(category_all, task_id, args):
                 if( np.abs(y_pos - start_at[1]) < (1+(piece_y_dim / 2))):
                     overlap =  True  # Obstacle too close to initial condition
                     continue
-            if (np.abs(x_pos - go_to[0]) < 1+(piece_x_dim / 2) and  np.abs(y_pos - go_to[1]) < 1+(piece_y_dim / 2)):
+            if (np.abs(x_pos - go_to[0]) < 2+(piece_x_dim / 2) and  np.abs(y_pos - go_to[1]) < 1+(piece_y_dim / 2)):
                 overlap =  True  # Obstacle too close to goal state
                 continue
             ############################################################
@@ -364,6 +365,8 @@ def process_mesh(category_all, task_id, args):
     plt.scatter(goal_state_bin[1], goal_state_bin[0], s=10, color='green')
     plt.savefig(os.path.join(save_path, 'task.png'))
     plt.close()
+    grid_path = os.path.join(save_path, 'occupancy_grid.npz')
+    np.savez(grid_path, room_voxels_2d)
 
     # Save task
     task = OmegaConf.create()
@@ -423,14 +426,14 @@ if __name__ == "__main__":
         '--room_dim', default=8, nargs='?', help='room dimension'
     )
     parser.add_argument(
-        '--min_obstacle_spacing', default=1, nargs='?',
+        '--min_obstacle_spacing', default=1.5, nargs='?',
         help='min obstacle spacing'
     )
     parser.add_argument(
         '--min_init_goal_dist', default=7, nargs='?',
         help='min distance between init position and goal'
     )
-    parser.add_argument('--seed', default=33, nargs='?', help='random seed')
+    parser.add_argument('--seed', default=44, nargs='?', help='random seed')
     args = parser.parse_args()
 
     # cfg

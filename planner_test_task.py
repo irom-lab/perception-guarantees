@@ -17,6 +17,8 @@ from utils.pc_util import preprocess_point_cloud, pc_to_axis_aligned_rep, random
 from utils.box_util import box2d_iou
 from utils.make_args import make_args_parser
 
+from nav_sim.asset.util import state_lin_to_bin, state_bin_to_lin
+
 from models import build_model
 from datasets.sunrgbd import SunrgbdDatasetConfig as dataset_config
 import time
@@ -37,6 +39,9 @@ print("dt=", dt)
 
 # camera + 3DETR
 num_pc_points = 40000
+
+np.random.seed(44)
+torch.manual_seed(44)
 
 parser = make_args_parser()
 args = parser.parse_args(args=[])
@@ -60,11 +65,11 @@ with open("env_params.json", "r") as read_file:
     params = json.load(read_file)
 
 robot_radius = 0.3
-cp = 0.02
-# cp=0.4
+# cp = 0.02
+cp=0.73
 print("CP: ", cp)
 
-foldername = "../data/perception-guarantees/rooms_planning/"
+foldername = "../data/perception-guarantees/rooms_multiple_chairs/"
 
 def state_to_planner(state, sp):
     # convert robot state to planner coordinates
@@ -86,8 +91,11 @@ def boxes_to_planner_frame(boxes, sp):
 def plan_env(task):
     # initialize planner
     visualize = False
-    task.goal_radius = 0.5
+    task.goal_radius = 1.0
     filename = foldername + str(task.env) + '/cp' + str(cp)
+    grid_data = np.load((foldername + str(task.env) + '/occupancy_grid.npz'), allow_pickle=True)
+    occupancy_grid = grid_data['arr_0']
+    N, M = occupancy_grid.shape
     env = TaskEnv(render=visualize)
     # init_state = [1,-3,-np.pi/2]
     task.init_state = [0.2,-1,0,0]
@@ -95,7 +103,7 @@ def plan_env(task):
     # task.init_state = [float(v) for v in init_state]
     # task.goal_loc = [float(v) for v in goal_loc]
     planner_init_state = [5,0.2,0,0]
-    sp = Safe_Planner(init_state=planner_init_state, FoV=60*np.pi/180, n_samples=2000,dt=dt,radius = 0.5, sensor_dt=0.5, max_search_iter=2000)
+    sp = Safe_Planner(init_state=planner_init_state, FoV=70*np.pi/180, n_samples=2000,dt=dt,radius = 0.1, sensor_dt=0.5, max_search_iter=2000)
     sp.load_reachable(Pset, reachable)
     env.dt = sp.dt
     env.reset(task)
@@ -109,6 +117,8 @@ def plan_env(task):
     ground_truth = boxes_to_planner_frame(np.array(gt_obs), sp)
     done = False
     collided = False
+    prev_policy = []
+    idx_prev = 0
     while True and not done and not collided:
         state = state_to_planner(env._state, sp)
         # print(state)
@@ -134,15 +144,21 @@ def plan_env(task):
             # policy = np.vstack(res[2])
             policy_before_trans = np.vstack(res[2])
             policy = (np.array([[0,1],[-1,0]])@policy_before_trans.T).T
+            prev_policy = np.copy(policy)
             for step in range(min(int(sp.sensor_dt/sp.dt), len(policy))):
+                idx_prev = step
                 state = env._state
                 state_traj.append(state_to_planner(state, sp))
+                # og_loc = [round(state[0]/0.1)+1 , round((state[1]+4)/0.1)+1]
+                # print("State: ", state, " in occupancy grid location: ", state_lin_to_bin(og_loc, [N,M]), " og location ", occupancy_grid[og_loc[0], og_loc[1]])
                 for obs in task.piece_bounds_all:
                     if state[0] < obs[3] and state[0] > obs[0]:
                        if state[1] < obs[4] and state[1] > obs[1]: 
-                           print("Env: ", str(task.env), " Collision")
-                           collided = True
-                           break
+                           og_loc = [round(state[0]/0.1)+1 , round((state[1]+4)/0.1)+1]
+                           if occupancy_grid[og_loc[0], og_loc[1]]:
+                                print("Env: ", str(task.env), " Collision")
+                                collided = True
+                                break
                 action = policy[step]
                 observation, reward, done, info = env.step(action)
                 t += sp.dt
@@ -150,13 +166,25 @@ def plan_env(task):
                     print("Env: ", str(task.env), " Success!")
                     break
         else:
-            for step in range(int(sp.sensor_dt/sp.dt)):
+            if (len(prev_policy) > idx_prev+1): #int(sp.sensor_dt/sp.dt):
+                # for kk in range(int(sp.sensor_dt/sp.dt)):
+                idx_prev += 1
+                action = prev_policy[idx_prev]
+                observation, reward, done, info = env.step(action)
+                # time.sleep(sp.dt)
+                t += sp.dt
+            else:
                 action = [0,0]
                 observation, reward, done, info = env.step(action)
-                state = env._state
-                state_traj.append(state_to_planner(state, sp))
+                # time.sleep(sp.dt)
                 t += sp.dt
-        if t >60:
+            # for step in range(int(sp.sensor_dt/sp.dt)):
+            #     action = [0,0]
+            #     observation, reward, done, info = env.step(action)
+            #     state = env._state
+            #     state_traj.append(state_to_planner(state, sp))
+            #     t += sp.dt
+        if t >100:
             print("Env: ", str(task.env), " Failed")
             break
     plot_results(filename, state_traj , ground_truth, sp)
@@ -391,7 +419,7 @@ if __name__ == '__main__':
         # save_tasks += [task]
         env += 1 
         if env%batch_size == 0:
-            if env >10: # In case code stops running, change starting environment to last batch saved
+            if env >70: # In case code stops running, change starting environment to last batch saved
                 batch = math.floor(env/batch_size)
                 print("Saving batch", str(batch))
                 t_start = time.time()

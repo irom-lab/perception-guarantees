@@ -64,7 +64,7 @@ class World:
         # TODO: measure and update empirically
         # x_brake = 0.12512712
         # y_brake = 0.1972604
-        new_state = expm(A*10**3)@state + [[0.45,0.45,0,0]]
+        new_state = expm(A*10**3)@state
         if self.isValid(new_state[0]):
             return True
 
@@ -85,11 +85,8 @@ class World:
         ax.set_ylim([0,self.h])
         ax.set_aspect('equal')
         if true_boxes is not None:
-            boxes = true_boxes[0]
-            yaws = true_boxes[1]
-            for idx, box in enumerate(boxes):
-                angle_deg = yaws[idx] * (180 / np.pi) - 90 # convert to degrees and planner orientation
-                ax.add_patch(Rectangle((box[0,0],box[0,1]),box[1,0]-box[0,0],box[1,1]-box[0,1], angle=angle_deg, rotation_point='center', edgecolor = 'k',fc=(1,0,0,0.8)))
+            for box in true_boxes:
+                ax.add_patch(Rectangle((box[0,0],box[0,1]),box[1,0]-box[0,0],box[1,1]-box[0,1],edgecolor = 'k',fc=(1,0,0,0.8)))
         if self.occ_space.geom_type == 'Polygon':
             self.occ_space = MultiPolygon([self.occ_space])
         for geom in self.occ_space.geoms:
@@ -120,7 +117,7 @@ class World:
             else:
                 print(self.free_space.geom_type)
         return fig, ax
-
+    
 class Safe_Planner:
     def __init__(self,
                  # Pset: list,
@@ -139,7 +136,7 @@ class Safe_Planner:
                  FoV_close = 1,
                  n_samples = 2000,
                  max_search_iter = 1000,
-                 weight = 7,  #5, #weight for cost to go
+                 weight = 10,  #5, #weight for cost to go
                  seed = 0):
         # load inputs
 
@@ -540,11 +537,11 @@ class Safe_Planner:
                 if goal_loc is None or self.goal_idx == self.n_samples:
                     goal_flag = -1
                     idx_solution = [self.goal_idx]
-                    print('planning failed, stay')
+                    # print('planning failed, stay')
                     break
                 else:
                     self.goal_explored.append(self.Pset[self.goal_idx][0:2])
-                    print('intermediate goal: ', self.Pset[self.goal_idx])
+                    # print('intermediate goal: ', self.Pset[self.goal_idx])
 
                     if self.bool_unvisit[self.goal_idx]==False:
                         idx_solution, _ = self.solve(start_idx)
@@ -561,7 +558,7 @@ class Safe_Planner:
             u_waypoints.append(u_waypoint)
 
         end = tm.time()
-        print('planning time: ', end-start)
+        # print('planning time: ', end-start)
         return idx_solution, x_waypoints, u_waypoints
 
     def build_tree(self, start_idx):

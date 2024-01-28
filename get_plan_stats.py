@@ -11,7 +11,8 @@ import torch
 
 num_envs =100
 # cp = 0.02
-cp = 0.4
+# cp = 0.4
+cp=0.73
 foldername = "../data/perception-guarantees/rooms_planning/"
 filename = "cp_" + str(cp) + "_10Hz.npz"
 traj = {}
