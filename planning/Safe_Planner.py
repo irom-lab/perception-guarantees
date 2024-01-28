@@ -12,42 +12,10 @@ import pickle
 from shapely.geometry import Point, MultiPolygon, Polygon, LineString, MultiPoint
 from shapely.ops import unary_union
 from shapely.geometry.polygon import orient
-from shapely.validation import make_valid
-from planning.utils import turn_box, non_det_filter, filter_reachable, find_frontier, find_polygon
+from planning.utils import turn_box, non_det_filter, filter_reachable
 
 [k1, k2, A, B, R, BRB] = pickle.load(open('planning/sp_var.pkl','rb'))
 
-class Ray:
-    def __init__(self, angle, vert):
-        self.start = vert[0]
-        self.end = vert[1]
-        self.angle = angle
-    def find_box(self, geoms, frontier, world):
-        buffer = 2e-5 
-        self.start_box = LineString([[0,0],[0,0]])
-        self.end_box = LineString([[0,0],[0,0]])
-        ab = LineString(frontier[self.angle])
-        x = ab.intersection(world)
-        if not x.is_empty:
-            self.end_box = world
-        for geom in geoms:
-            geom_buff = geom.buffer(buffer)
-
-            x1 = ab.intersection(geom)
-            x2 = ab.intersection(geom_buff)
-            if not x1.is_empty:
-                x_coords = np.array([x1.coords.xy[0][0],x1.coords.xy[1][0]])
-                if np.all(abs(self.start-x_coords)<buffer):
-                    self.start_box = geom.exterior
-                elif np.all(abs(self.end-x_coords)<buffer):
-                    self.end_box = geom.exterior
-            elif not x2.is_empty:
-                x_coords = np.array([x2.coords.xy[0][0],x2.coords.xy[1][0]])
-                if np.all(abs(self.start-x_coords)<buffer):
-                    self.start_box = geom.exterior
-                elif np.all(abs(self.end-x_coords)<buffer):
-                    self.end_box = geom.exterior
-            
 class World:
     def __init__(self, world_box):
         self.w = world_box[1,0] - world_box[0,0]
@@ -65,7 +33,9 @@ class World:
         else:
             self.box_space = non_det_filter(self.box_space, new_occ_space)
         self.occ_space = unary_union(turn_box(new_boxes))
-
+        # self.box_space = Polygon([[0,0],[0,self.h],[self.w,self.h],[self.w,0],[0,0]]).intersection(self.box_space)
+        world_polygon = Polygon([[0,0],[8,0],[8,8],[0,8],[0,0]])
+        self.box_space = world_polygon.intersection(self.box_space)
         if self.occ_space.geom_type == 'Polygon':
             self.occ_space = MultiPolygon([self.occ_space])
         if self.box_space.geom_type == 'Polygon':
@@ -74,7 +44,7 @@ class World:
         self.occ_space.simplify(1e-5)
         self.occ_space = MultiPolygon([orient(s, sign=-1.0) for s in self.occ_space.geoms if s.geom_type == 'Polygon'])
         
-        self.box_space.simplify(1e-5)
+        self.box_space.simplify(1e-3)
         self.box_space = MultiPolygon([orient(s, sign=-1.0) for s in self.box_space.geoms if s.geom_type == 'Polygon'])
 
         self.counter += 1
@@ -127,8 +97,6 @@ class World:
             if self.free_space_new.geom_type == 'Polygon':
                 xs, ys = self.free_space_new.exterior.xy
                 ax.fill(xs,ys, edgecolor = 'k', linestyle='--', fc = (0,0,0,0))
-            elif self.free_space_new.geom_type == 'LineString':
-                print('plotting problem:', self.free_space_new.geom_type)
             else:
                 for geom in self.free_space_new.geoms:
                     if geom.geom_type == 'Polygon':
@@ -146,14 +114,6 @@ class World:
                     ax.fill(xs,ys, edgecolor = 'k',fc=(0, 0.4470, 0.7410,0.5))
             else:
                 print(self.free_space.geom_type)
-        return fig, ax
-
-    def show_occlusion(self,polygons):
-        fig, ax = self.show()
-        ax.set_xlim([0,self.w])
-        ax.set_ylim([0,self.h])
-        for polygon in polygons:
-            ax.fill(polygon[0],polygon[1],edgecolor = 'None',alpha=0.5)
         return fig, ax
 
 class Safe_Planner:
@@ -224,7 +184,6 @@ class Safe_Planner:
         origin_shift = np.atleast_2d(np.array([self.world.w/2,0,0,0]))
 
         state_tf = (np.array([[[0,-1,0,0],[1,0,0,0],[0,0,0,-1],[0,0,1,0]]]) @ state.T + origin_shift.T)
-
         return state_tf.squeeze()
 
     # preparation
@@ -366,27 +325,60 @@ class Safe_Planner:
             self.goal_idx = subgoal_idxs[idx_incost]
             return self.Pset[subgoal_idxs[idx_incost]]
 
-    def occlusion(self, state):
-        '''Returns occlusion polygon'''
-        start =state[0,0:2]
-        world = LineString([[0,0],[0,self.world.h],[self.world.w,self.world.h],[self.world.w,0],[0,0]])
+    def occlusion(self, start):
+        '''returns free space polygon'''
 
-        # frontier = find_frontier(self.world.occ_space, self.world_box, start, self.FoV)
-        frontier = find_frontier(self.world.box_space, self.world_box, start, self.FoV)
-        rays = list(frontier.keys())
-        rays.sort()
-        ray_objects = []
-        for ray in rays:
-            ray_object = Ray(ray,frontier[ray])
-            # ray_object.find_box(self.world.occ_space.geoms, frontier, world)
-            ray_object.find_box(self.world.box_space.geoms, frontier, world)
-            ray_objects.append(ray_object)
+        # find all edges
+        edges = []
+        for i in range(len(self.world.box_space.geoms)):
+            b = self.world.box_space.geoms[i].exterior.coords
+            edges += [LineString(b[k:k+2]) for k in range(len(b) - 1)]
+        # world boundary
+        world = LineString([[0,0],[0,self.world_box[1][1]],[self.world_box[1][0],self.world_box[1][1]],
+                            [self.world_box[1][0],0],[0,0]])
+        
+        # start occlusion algorithm
+        occlusion_space = self.world.box_space
+        for edge in edges:
+            world_intersects = []
+            vertices = []
+            for pt in edge.boundary.geoms:
+                angle = np.mod(np.arctan2(pt.y-start[1],pt.x-start[0]),2*np.pi)
+                ray_line = LineString([start[0:2],start[0:2]+12*np.array([np.cos(angle),np.sin(angle)])])
+                world_intersects.append(world.intersection(ray_line))
+                vertices.append(pt)
+            if (world_intersects[0].x != world_intersects[1].x and
+                world_intersects[0].y != world_intersects[1].y):
+                if world_intersects[0].x == 0 or world_intersects[1].x == 0:
+                    world_intersects.append(Point([0,8]))
+                elif world_intersects[0].x == 8 or world_intersects[1].x == 8:
+                    world_intersects.append(Point([8,8]))
+            # convex hull
+            occ = MultiPoint(vertices + world_intersects).convex_hull
+            if occ.geom_type == 'Polygon':
+                # fig, ax = self.world.show()
+                # ax.plot(*occ.exterior.xy)
+                # plt.show()
+                occlusion_space = occlusion_space.union(occ)
+        
+        # limited field of view
+        ray_left = LineString([start[0:2],start[0:2]+12*np.array([np.cos(np.pi/2+self.FoV/2),np.sin(np.pi/2+self.FoV/2)])])
+        ray_right = LineString([start[0:2],start[0:2]+12*np.array([np.cos(np.pi/2-self.FoV/2),np.sin(np.pi/2-self.FoV/2)])])
+        world_intersect_left = ray_left.intersection(world)
+        fov_v = [Point(start[0:2]),world_intersect_left]
+        if world_intersect_left.x != 0:
+            fov_v.append(Point([0,8]))
+        fov_v += [Point([0,0]),Point([8,0])]
+        world_intersect_right = ray_right.intersection(world)
+        if world_intersect_right.x != 8:
+            fov_v.append(Point([8,8]))
+        fov_v += [world_intersect_right, Point(start[0:2])]
 
-        vs = find_polygon(ray_objects, world)
-        if len(vs) >= 4:
-            return make_valid(Polygon(vs))
-        else:
-            return None
+        occlusion_space = occlusion_space.union(Polygon(fov_v))
+
+        world_polygon = Polygon([[0,0],[8,0],[8,8],[0,8],[0,0]])
+        return world_polygon.difference(occlusion_space)
+
 
     # plots
     def plot_reachable(self, direction):
@@ -472,31 +464,30 @@ class Safe_Planner:
             axs[2,1].plot(t_array, res[1][i][:,1],'k-')
         plt.show()
 
-    def check_collision(self,node_idx):
-            state = self.Pset[node_idx]
-            self.bool_valid[node_idx] = self.world.free_space.buffer(1e-5).contains(Point(state[0],state[1]))
-
     # safety planning algorithm
     def plan(self, state, new_boxes):
         #plan at new sensor time step when we get new boxes
         start = tm.time()
 
+        if state.shape == (4,):
+            state = state.reshape(1,4)
+
         # apply filter to update the world
         sense_range = state[0,1]+self.FoV_range*np.cos(self.FoV/2)
-        toofar = np.array([[[self.world_box[0,0],state[0,1]+sense_range],
+        toofar = np.array([[[self.world_box[0,0],sense_range],
                             [self.world_box[1,0],self.world_box[1,1]]]])
         tooclose = Polygon([[state[0,0]-self.FoV_close,state[0,1]-self.FoV_close],
                             [state[0,0]+self.FoV_close,state[0,1]-self.FoV_close],
                             [state[0,0]+self.FoV_close,state[0,1]+self.FoV_close],
                             [state[0,0]-self.FoV_close,state[0,1]+self.FoV_close],
                             [state[0,0]-self.FoV_close,state[0,1]-self.FoV_close]])
-        if state[0,1] + sense_range <= self.world_box[1,1]:
+        if sense_range <= self.world_box[1,1]:
             new_boxes = np.append(new_boxes,toofar,axis=0)
     
         self.world.update(new_boxes)
         # occlusion
         if self.world.occ_space.contains(Point(state[0,0],state[0,1])) == False:
-            self.world.free_space_new = self.occlusion(state)
+            self.world.free_space_new = self.occlusion(state[0])
             if self.world.free_space_new is not None:
                 self.world.free_space_new = self.world.free_space_new.difference(tooclose)
                 if self.world.free_space_new.is_valid:            
@@ -538,11 +529,11 @@ class Safe_Planner:
                 if goal_loc is None or self.goal_idx == self.n_samples:
                     goal_flag = -1
                     idx_solution = [self.goal_idx]
-                    # print('planning failed, stay')
+                    print('planning failed, stay')
                     break
                 else:
                     self.goal_explored.append(self.Pset[self.goal_idx][0:2])
-                    # print('intermediate goal: ', self.Pset[self.goal_idx])
+                    print('intermediate goal: ', self.Pset[self.goal_idx])
 
                     if self.bool_unvisit[self.goal_idx]==False:
                         idx_solution, _ = self.solve(start_idx)
@@ -570,6 +561,7 @@ class Safe_Planner:
             if not self.bool_unvisit[self.goal_idx]: # goal node is visited
                 goal_flag = 1
                 break
+        # print('num_iteration:', self.itr)
         self.itr=1
         return goal_flag
 
