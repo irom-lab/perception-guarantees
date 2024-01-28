@@ -8,6 +8,7 @@ from matplotlib.patches import Rectangle
 
 import time as tm
 import pickle
+from multiprocessing import Pool
 
 from shapely.geometry import Point, MultiPolygon, Polygon, LineString, MultiPoint
 from shapely.ops import unary_union
@@ -51,6 +52,7 @@ class World:
 
     def isValid(self, state):
         '''Collision check'''
+        # print("ISVALID STATE", state)
         return self.free_space.buffer(1e-5).contains(Point(state[0],state[1]))
 
     def isValid_multiple(self, states):
@@ -62,8 +64,8 @@ class World:
         # TODO: measure and update empirically
         # x_brake = 0.12512712
         # y_brake = 0.1972604
-        new_state = expm(A*10**3)@state
-        if self.isValid(new_state):
+        new_state = expm(A*10**3)@state + [[0.45,0.45,0,0]]
+        if self.isValid(new_state[0]):
             return True
 
         # x_brake = state[2]/k1
@@ -83,27 +85,30 @@ class World:
         ax.set_ylim([0,self.h])
         ax.set_aspect('equal')
         if true_boxes is not None:
-            for box in true_boxes:
-                ax.add_patch(Rectangle((box[0,0],box[0,1]),box[1,0]-box[0,0],box[1,1]-box[0,1],edgecolor = 'k',fc=(1,0,0,0.8)))
+            boxes = true_boxes[0]
+            yaws = true_boxes[1]
+            for idx, box in enumerate(boxes):
+                angle_deg = yaws[idx] * (180 / np.pi) - 90 # convert to degrees and planner orientation
+                ax.add_patch(Rectangle((box[0,0],box[0,1]),box[1,0]-box[0,0],box[1,1]-box[0,1], angle=angle_deg, rotation_point='center', edgecolor = 'k',fc=(1,0,0,0.8)))
         if self.occ_space.geom_type == 'Polygon':
             self.occ_space = MultiPolygon([self.occ_space])
         for geom in self.occ_space.geoms:
             xs, ys = geom.exterior.xy
             ax.fill(xs,ys, fc=(1,0,0,0.3))
-        for geom in self.box_space.geoms:
-            xs, ys = geom.exterior.xy
-            ax.fill(xs,ys, fc=(1,1,0,0.9))
-        if self.free_space_new is not None:
-            if self.free_space_new.geom_type == 'Polygon':
-                xs, ys = self.free_space_new.exterior.xy
-                ax.fill(xs,ys, edgecolor = 'k', linestyle='--', fc = (0,0,0,0))
-            else:
-                for geom in self.free_space_new.geoms:
-                    if geom.geom_type == 'Polygon':
-                        xs, ys = geom.exterior.xy
-                        ax.fill(xs,ys, edgecolor = 'k', linestyle='--', fc = (0,0,0,0))
-                    else:
-                        print('plotting problem:', geom.geom_type)
+        # for geom in self.box_space.geoms:
+        #     xs, ys = geom.exterior.xy
+        #     ax.fill(xs,ys, fc=(1,1,0,0.9))
+        # if self.free_space_new is not None:
+        #     if self.free_space_new.geom_type == 'Polygon':
+        #         xs, ys = self.free_space_new.exterior.xy
+        #         ax.fill(xs,ys, edgecolor = 'k', linestyle='--', fc = (0,0,0,0))
+        #     else:
+        #         for geom in self.free_space_new.geoms:
+        #             if geom.geom_type == 'Polygon':
+        #                 xs, ys = geom.exterior.xy
+        #                 ax.fill(xs,ys, edgecolor = 'k', linestyle='--', fc = (0,0,0,0))
+        #             else:
+        #                 print('plotting problem:', geom.geom_type)
         if self.free_space is not None:
             if self.free_space.geom_type == 'Polygon':
                 xs, ys = self.free_space.exterior.xy
@@ -134,7 +139,7 @@ class Safe_Planner:
                  FoV_close = 1,
                  n_samples = 2000,
                  max_search_iter = 1000,
-                 weight = 10,  #5, #weight for cost to go
+                 weight = 7,  #5, #weight for cost to go
                  seed = 0):
         # load inputs
 
@@ -147,6 +152,8 @@ class Safe_Planner:
         self.world = World(world_box)
         self.goal_f = goal_f
         self.goal = self.state_to_planner(self.goal_f)
+        # self.pool = Pool(num_parallel)
+
 
         self.world.free_space = Polygon(((init_state[0]-sr, init_state[1]-sr),
                                          (init_state[0]-sr, init_state[1]+sr),
@@ -279,7 +286,7 @@ class Safe_Planner:
 
         
         cand_obj = MultiPoint(np.array(candidates))
-        candidates = np.array(candidates)[np.where(self.world.occ_space.buffer(1e-5).contains(cand_obj.geoms)==False)[0]]
+        candidates = np.array(candidates)#[np.where(self.world.occ_space.buffer(1e-5).contains(cand_obj.geoms)==False)[0]]
         # fig, ax = self.world.show()
         # if len(candidates) > 0:
         #    ax.scatter(*zip(*candidates))
@@ -345,7 +352,11 @@ class Safe_Planner:
             for pt in edge.boundary.geoms:
                 angle = np.mod(np.arctan2(pt.y-start[1],pt.x-start[0]),2*np.pi)
                 ray_line = LineString([start[0:2],start[0:2]+12*np.array([np.cos(angle),np.sin(angle)])])
-                world_intersects.append(world.intersection(ray_line))
+                world_intersection = world.intersection(ray_line)
+                if world_intersection.geom_type == 'Point':
+                    world_intersects.append(world_intersection)
+                elif world_intersection.geom_type == 'MultiPoint':
+                    world_intersects.append(world_intersection[0])
                 vertices.append(pt)
             if (world_intersects[0].x != world_intersects[1].x and
                 world_intersects[0].y != world_intersects[1].y):
