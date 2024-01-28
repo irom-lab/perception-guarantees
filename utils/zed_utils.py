@@ -186,14 +186,19 @@ class Zed:
             # points[:,0] = -points_temp[:,2]
             # points[:,1] = -points_temp[:,0]
             # print(np.shape(points), np.min(points), np.max(points))
-            if (len(points[0])>0):
-                batch_size = 1
-                points = np.array(points).astype('float32')
-                # Downsample
-                points_ds = preprocess_point_cloud(points, self.num_pc_points)
-                points_ds = points_ds.reshape((batch_size, self.num_pc_points, 3))
-                pc_all = torch.from_numpy(points_ds).to(self.device)
-                boxes, box_features = self.get_box_from_pc(pc_all, cp, num_boxes, False)
+            if len(points) > 0:
+                if (len(points[0])>0):
+                    batch_size = 1
+                    points = np.array(points).astype('float32')
+                    # Downsample
+                    points_ds = preprocess_point_cloud(points, self.num_pc_points)
+                    points_ds = points_ds.reshape((batch_size, self.num_pc_points, 3))
+                    pc_all = torch.from_numpy(points_ds).to(self.device)
+                    boxes, box_features = self.get_box_from_pc(pc_all, cp, num_boxes, False)
+                else:
+                    points = np.zeros((1,self.num_pc_points, 3),dtype='float32')
+                    pc_all = torch.from_numpy(points).to(self.device)
+                    boxes, box_features = self.get_room_size_box(pc_all)
             else:
                 points = np.zeros((1,self.num_pc_points, 3),dtype='float32')
                 pc_all = torch.from_numpy(points).to(self.device)
