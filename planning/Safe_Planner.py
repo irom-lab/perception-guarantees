@@ -16,6 +16,7 @@ from shapely.geometry.polygon import orient
 from planning.utils import turn_box, non_det_filter, filter_reachable
 
 [k1, k2, A, B, R, BRB] = pickle.load(open('planning/sp_var.pkl','rb'))
+expA = expm(A*10**3)
 
 class World:
     def __init__(self, world_box):
@@ -64,7 +65,7 @@ class World:
         # TODO: measure and update empirically
         # x_brake = 0.12512712
         # y_brake = 0.1972604
-        new_state = expm(A*10**3)@state
+        new_state = expA@state
         if self.isValid(new_state[0]):
             return True
 
@@ -629,9 +630,13 @@ class Safe_Planner:
         # check trajectory is collision-free
         if self.world.isValid_multiple(x_waypoints):
             # check ICS before sensor update
-            if (self.time_to_come[idx_parent] + time_new <= self.sensor_dt
-                and self.world.isICSfree(self.Pset[idx_near])):
-                self.connect(idx_near,cost_new,time_new,idx_parent)
+            if self.time_to_come[idx_parent] + time_new <= self.sensor_dt:
+                connect = True
+                for x_waypoint in x_waypoints[0:int(np.floor(self.sensor_dt/self.dt)]:
+                    if not self.world.isICSfree(x_waypoint):
+                        connect = False
+                if connect:
+                    self.connect(idx_near,cost_new,time_new,idx_parent)
             elif self.time_to_come[idx_parent] + time_new > self.sensor_dt:
                 self.connect(idx_near,cost_new,time_new,idx_parent)
 
