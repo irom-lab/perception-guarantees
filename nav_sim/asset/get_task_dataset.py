@@ -6,12 +6,13 @@ import os
 import argparse
 import pickle
 import random
+import IPython as ipy
 
 
 def main(args):
     # count number of non-empty folders - sometimes we generate empty folders that the task generation was aborted
     path_all = []
-    for path in os.listdir(args.task_folder):
+    for path in sorted(sorted(os.listdir(args.task_folder)),key=len):
         if len(os.listdir(os.path.join(args.task_folder, path))) > 0:
             path_all += [path]
     num_tasks_available = len(path_all)
@@ -47,5 +48,5 @@ if __name__ == "__main__":
     )
     parser.add_argument('--seed', default=42, type=int, help='random seed')
     args = parser.parse_args()
-    random.seed(args.seed)
+    # random.seed(args.seed)
     main(args)

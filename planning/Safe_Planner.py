@@ -318,7 +318,7 @@ class Safe_Planner:
                     dist_to_go = np.linalg.norm(np.array(subgoal[0:2])-np.array(self.goal[0:2]))
                 else:
                     dist_to_go = np.inf
-                if dist_to_go <= 1: #goal radius
+                if dist_to_go <= 1.0: #goal radius
                     dist_to_go = 0
                 # append
                 costs.append(cost_to_come + self.weight*dist_to_go/v)
@@ -632,7 +632,7 @@ class Safe_Planner:
             # check ICS before sensor update
             if self.time_to_come[idx_parent] + time_new <= self.sensor_dt:
                 connect = True
-                for x_waypoint in x_waypoints[0:int(np.floor(self.sensor_dt/self.dt)]:
+                for x_waypoint in x_waypoints[0:int(np.floor(self.sensor_dt/self.dt))]:
                     if not self.world.isICSfree(x_waypoint):
                         connect = False
                 if connect:

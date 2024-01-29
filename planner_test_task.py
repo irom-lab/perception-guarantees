@@ -30,6 +30,8 @@ try:
 except RuntimeError:
     pass
 
+from models.model_perception import MLPModelDet
+
 f = open('planning/reachable_10Hz.pkl', 'rb')
 reachable = pickle.load(f)
 f = open('planning/Pset_10Hz.pkl', 'rb')
@@ -60,6 +62,12 @@ model.eval()
 
 device = torch.device("cuda")
 
+num_in = 32768
+num_out = (15, 2,3) # bbox corner representation
+model_cp = MLPModelDet(num_in, num_out)
+model_cp.to(device)
+model_cp.load_state_dict(torch.load("trained_models/perception_model"))
+
 # Load params from json file
 with open("env_params.json", "r") as read_file:
     params = json.load(read_file)
@@ -67,9 +75,12 @@ with open("env_params.json", "r") as read_file:
 robot_radius = 0.3
 # cp = 0.02
 cp=0.73
+is_finetune=False
+if is_finetune:
+    cp=0.61
 print("CP: ", cp)
 
-foldername = "../data/perception-guarantees/rooms_multiple_chairs/"
+foldername = "../data/perception-guarantees/rooms_planning/"
 
 def state_to_planner(state, sp):
     # convert robot state to planner coordinates
@@ -127,7 +138,7 @@ def plan_env(task):
         boxes[:,0,:] -= cp
         boxes[:,1,:] += cp
         boxes = boxes_to_planner_frame(boxes, sp)
-
+        st = time.time()
         try:
             res = sp.plan(state, boxes)
         except:
@@ -135,6 +146,7 @@ def plan_env(task):
             continue
             # plot_results(filename, state_traj , ground_truth, sp)
             # return {"trajectory": np.array(state_traj), "done": done, "collision": collided}
+        t+=(time.time() - st)
         if (steps_taken % 1) == 0 and visualize:
             # sp.show_connection(res[0]) 
             sp.world.free_space
@@ -155,10 +167,10 @@ def plan_env(task):
                     if state[0] < obs[3] and state[0] > obs[0]:
                        if state[1] < obs[4] and state[1] > obs[1]: 
                            og_loc = [round(state[0]/0.1)+1 , round((state[1]+4)/0.1)+1]
-                           if occupancy_grid[og_loc[0], og_loc[1]]:
-                                print("Env: ", str(task.env), " Collision")
-                                collided = True
-                                break
+                        #    if occupancy_grid[og_loc[0], og_loc[1]]:
+                           print("Env: ", str(task.env), " Collision")
+                           collided = True
+                           break
                 action = policy[step]
                 observation, reward, done, info = env.step(action)
                 t += sp.dt
@@ -184,7 +196,7 @@ def plan_env(task):
             #     state = env._state
             #     state_traj.append(state_to_planner(state, sp))
             #     t += sp.dt
-        if t >100:
+        if t >120:
             print("Env: ", str(task.env), " Failed")
             break
     plot_results(filename, state_traj , ground_truth, sp)
@@ -244,6 +256,10 @@ def get_box(observation_, visualize = False):
     outputs = model(inputs)
     # end = tm.time()
     # print("Time taken for inference: ", end-start)
+    if is_finetune:
+        box_features = outputs["box_features"].detach()
+        box_features_ = torch.reshape(box_features, (1,1,128,256))
+        finetune = model_cp(box_features_)
     
     bbox_pred_points = outputs['outputs']['box_corners'].detach().cpu()
     obj_prob = outputs["outputs"]["objectness_prob"].clone().detach().cpu()
@@ -302,6 +318,12 @@ def get_box(observation_, visualize = False):
                         np.sum(np.abs(s-e)) == r2[1]-r2[0]):
                         if (visualize and not flag):
                             ax.plot3D(*zip(s, e), color=(0.5+0.5*prob, 0.1,0.1))
+    
+    if is_finetune:
+        finetuned_arr = finetune.cpu().detach().numpy()
+        finetuned_arr = np.squeeze(finetuned_arr)
+        # ipy.embed()
+        corners+=finetuned_arr
     
     boxes = np.zeros((len(corners),2,2))
     for i in range(len(corners)):
@@ -419,7 +441,7 @@ if __name__ == '__main__':
         # save_tasks += [task]
         env += 1 
         if env%batch_size == 0:
-            if env >70: # In case code stops running, change starting environment to last batch saved
+            if env >0: # In case code stops running, change starting environment to last batch saved
                 batch = math.floor(env/batch_size)
                 print("Saving batch", str(batch))
                 t_start = time.time()

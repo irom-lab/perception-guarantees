@@ -123,7 +123,8 @@ def process_mesh(category_all, task_id, args):
     piece_saved_bounds = []
     piece_id_all = []
     piece_pos_all = []
-    num_furniture = np.random.randint(args.num_furniture_per_room)+1
+    num_furniture = args.num_furniture_per_room #np.random.randint(args.num_furniture_per_room)+1
+    num_occlude = int(np.floor(num_furniture/2))
     while num_furniture_saved < num_furniture:
         category_chosen = random.choice(list(category_all.keys()))
         num_piece_category_available = len(category_all[category_chosen])
@@ -187,15 +188,18 @@ def process_mesh(category_all, task_id, args):
                     prev_bounds[1, 0], prev_bounds[1, 1]
                 )
                 offset = rect_distance(a, b)
-                if offset < args.min_obstacle_spacing:
+                if offset < args.min_obstacle_spacing and num_furniture_saved < (num_furniture-num_occlude):
                     overlap = True
+                    break
+                elif offset < 0.1:
+                    overlap=True
                     break
 
             ############################################################
             start_at = [0.2, -1]
             go_to  =[7,-2]
             # ipy.embed()
-            if (np.abs(x_pos - start_at[0]) < (2+(piece_x_dim / 2))):
+            if (np.abs(x_pos - start_at[0]) < (3+(piece_x_dim / 2))):
                 if( np.abs(y_pos - start_at[1]) < (1+(piece_y_dim / 2))):
                     overlap =  True  # Obstacle too close to initial condition
                     continue
@@ -426,7 +430,7 @@ if __name__ == "__main__":
         '--room_dim', default=8, nargs='?', help='room dimension'
     )
     parser.add_argument(
-        '--min_obstacle_spacing', default=1.5, nargs='?',
+        '--min_obstacle_spacing', default=2, nargs='?',
         help='min obstacle spacing'
     )
     parser.add_argument(
