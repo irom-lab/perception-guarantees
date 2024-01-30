@@ -32,10 +32,11 @@ def main(raw_args=None):
 
 	###################################################################
 	# Initialize dataset and dataloader
-	dataset = PointCloudDataset("data/features15_cal.pt", "data/bbox_labels15_cal.pt", "data/loss_mask15_cal.pt", "data/finetune15_cal.pt")
+	dataset = PointCloudDataset("data/features15_cal_variable_chairs.pt", "data/bbox_labels15_cal_variable_chairs.pt", "data/loss_mask15_cal_variable_chairs.pt", "data/finetune15_cal_variable_chairs.pt")
+	# dataset = PointCloudDataset("data/features15_cal_variable_chairs.pt", "data/bbox_labels15_cal_variable_chairs.pt", "data/loss_mask15_cal_variable_chairs.pt")
 	# dataset = PointCloudDataset("data/features15_cal.pt", "data/bbox_labels15_cal.pt", "data/loss_mask15_cal.pt")
-	prior_dataset = PointCloudDataset("data/features15_prior.pt", "data/bbox_labels15_prior.pt", "data/loss_mask15_prior.pt", "data/finetune15_prior.pt")
-	test_dataset = PointCloudDataset("data/features15_test.pt", "data/bbox_labels15_test.pt", "data/loss_mask15_test.pt", "data/finetune15_test.pt")
+	# prior_dataset = PointCloudDataset("data/features15_prior.pt", "data/bbox_labels15_prior.pt", "data/loss_mask15_prior.pt", "data/finetune15_prior.pt")
+	test_dataset = PointCloudDataset("data/features15_test_variable_chairs.pt", "data/bbox_labels15_test_variable_chairs.pt", "data/loss_mask15_test_variable_chairs.pt", "data/finetune15_test_variable_chairs.pt")
 	# test_dataset = PointCloudDataset("data/features_test.pt", "data/bbox_labels_test.pt", "data/loss_mask_test.pt")
 	batch_size = 100 #100
 	N=len(dataset)
@@ -49,7 +50,7 @@ def main(raw_args=None):
 				'shuffle': False}
 			   # 'num_workers': 12}
 	dataloader = DataLoader(dataset, **params)
-	dataloader_prior = DataLoader(prior_dataset, batch_size=1)
+	# dataloader_prior = DataLoader(prior_dataset, batch_size=1)
 	dataloader_test = DataLoader(test_dataset, batch_size=1)
 	dataloader_cp = DataLoader(dataset, batch_size=len(dataset))
 	###################################################################
@@ -79,7 +80,7 @@ def main(raw_args=None):
 	w2 = torch.tensor(0.5).to(device) #0.1
 	w3 = torch.tensor(0.1).to(device) #1
 
-	model_cp.load_state_dict(torch.load("trained_models/perception_model_w205"))
+	model_cp.load_state_dict(torch.load("trained_models/perception_model_planner"))
 
 	# # Run the finetuning  loop
 	# print("Finetuning")
@@ -141,12 +142,12 @@ def main(raw_args=None):
 	# for i, data in enumerate(dataloader_cp, 0):
 	# 	inputs, targets, loss_mask = data
 	# 	# print(len(dataset), len(inputs))
-	# 	inputs = inputs.to(device)
+	# 	# inputs = inputs.to(device)
 	# 	boxes_3detr = targets["bboxes_3detr"].to(device)
 	# 	boxes_gt = targets["bboxes_gt"].to(device)
 	# 	loss_mask = loss_mask.to(device)
-	# 	scaling_cp = scale_prediction(boxes_3detr, boxes_gt, loss_mask, 0.885) #for coverage of 0.95 w.p. 0.99 
-	# 	average_cp = scale_prediction_average(boxes_3detr, boxes_gt, loss_mask, 0.885)
+	# 	scaling_cp = scale_prediction(boxes_3detr, boxes_gt, loss_mask, 0.887) #for coverage of 0.95 w.p. 0.99 
+	# 	average_cp = scale_prediction_average(boxes_3detr, boxes_gt, loss_mask, 0.887)
 	# 	print('CP quantile prediction', scaling_cp)
 	# 	print('CP quantile prediction (average)', average_cp)
 	# #################################################################
@@ -174,12 +175,12 @@ def main(raw_args=None):
 							print("This should not happen")
 							ipy.embed()
 			finetuned_boxes = outputs_sorted[:,:,0:boxes_3detr.shape[2],:,:]
-			scaling_cp = scale_prediction(boxes_3detr+finetuned_boxes, boxes_gt, loss_mask, 0.885) #for coverage of 0.95 w.p. 0.99 
-			average_cp = scale_prediction_average(boxes_3detr, boxes_gt, loss_mask, 0.885)
+			scaling_cp = scale_prediction(boxes_3detr+finetuned_boxes, boxes_gt, loss_mask, 0.887) #for coverage of 0.95 w.p. 0.99 
+			average_cp = scale_prediction_average(boxes_3detr, boxes_gt, loss_mask, 0.887)
 			print('CP quantile prediction', scaling_cp)
 			print('CP quantile prediction (average)', average_cp)
 
-	# ###################################################################
+	###################################################################
 
 	scaling_cp = 0.6138
 	scaling_cp = 0.735

@@ -18,17 +18,18 @@ import pickle
 from omegaconf import OmegaConf
 from shutil import rmtree, copyfile
 import random
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt 
 
-from nav_sim.asset.util import rect_distance, slice_mesh, state_lin_to_bin, get_neighbor, get_grid_cells_btw
+from nav_sim.asset.util import rect_distance, slice_mesh, state_lin_to_bin, get_neighbor, get_grid_cells_btw, state_bin_to_lin
+import IPython as ipy
 
 
 def process_mesh(category_all, task_id, args):
     max_init_goal_attempt = 2000
     max_obs_attempt = 2000
     grid_pitch = 0.10
-    free_init_radius = int((0.75) / grid_pitch)
-    free_goal_radius = int((0.75) / grid_pitch)
+    free_init_radius = [int(3/ grid_pitch), int(1/ grid_pitch)] #int(1 / grid_pitch)
+    free_goal_radius = [int(2/ grid_pitch),int(1/ grid_pitch)] #int((0.75) / grid_pitch)
     min_init_goal_grid = int(args.min_init_goal_dist / grid_pitch)
 
     # Room dimensions
@@ -83,10 +84,10 @@ def process_mesh(category_all, task_id, args):
         [0, 0, 1, room_height / 2],
         [0, 0, 0, 1],
     ]
-    front_wall = trimesh.creation.box(
-        [0.1, args.room_dim + 0.2, room_height + 0.2],
-        front_wall_transform_matrix,
-    )
+    # front_wall = trimesh.creation.box(
+    #     [0.1, args.room_dim + 0.2, room_height + 0.2],
+    #     front_wall_transform_matrix,
+    # )
     back_wall_transform_matrix = [
         [1, 0, 0, -0.05],
         [0, 1, 0, 0],
@@ -111,7 +112,7 @@ def process_mesh(category_all, task_id, args):
         floor,
         left_wall,
         right_wall,
-        front_wall,
+        # front_wall,
         back_wall,
     ])
     # room.show()
@@ -122,7 +123,9 @@ def process_mesh(category_all, task_id, args):
     piece_saved_bounds = []
     piece_id_all = []
     piece_pos_all = []
-    while num_furniture_saved < int(args.num_furniture_per_room):
+    num_furniture = np.random.randint(args.num_furniture_per_room)+1
+    num_occlude = int(np.floor(num_furniture/2))
+    while num_furniture_saved < num_furniture:
         category_chosen = random.choice(list(category_all.keys()))
         num_piece_category_available = len(category_all[category_chosen])
         model_id = category_all[category_chosen][
@@ -185,8 +188,11 @@ def process_mesh(category_all, task_id, args):
                     prev_bounds[1, 0], prev_bounds[1, 1]
                 )
                 offset = rect_distance(a, b)
-                if offset < args.min_obstacle_spacing:
+                if offset < args.min_obstacle_spacing and num_furniture_saved < (num_furniture-num_occlude):
                     overlap = True
+                    break
+                elif offset < 0.1:
+                    overlap=True
                     break
 
             # Check gap to walls
@@ -235,7 +241,7 @@ def process_mesh(category_all, task_id, args):
         return 0
     room_voxels_2d = np.max(room_voxels.matrix, axis=2)
     room_voxels_2d[1, :] = 1  # fill in gaps in wall
-    room_voxels_2d[-2, :] = 1
+    # room_voxels_2d[-2, :] = 1
     room_voxels_2d[:, 1] = 1
     room_voxels_2d[:, -2] = 1
     # room_voxels.show()
@@ -252,6 +258,7 @@ def process_mesh(category_all, task_id, args):
         goal_state = np.random.choice(free_states)
         init_state_bin = state_lin_to_bin(init_state, [N, M])
         goal_state_bin = state_lin_to_bin(goal_state, [N, M])
+        # ipy.embed()
 
         # Check if too close to obstacles
         init_neighbor = get_neighbor(
@@ -281,6 +288,9 @@ def process_mesh(category_all, task_id, args):
     if init_goal_attempt == max_init_goal_attempt:
         # print('no init/goal found')
         return 0
+    
+
+    ############################################################
     init_state = [
         room_voxels.origin[0] + init_state_bin[0] * grid_pitch,
         room_voxels.origin[1] + init_state_bin[1] * grid_pitch,
@@ -290,6 +300,23 @@ def process_mesh(category_all, task_id, args):
         room_voxels.origin[0] + goal_state_bin[0] * grid_pitch,
         room_voxels.origin[1] + goal_state_bin[1] * grid_pitch,
     ]
+
+    # init_state = state_bin_to_lin([3,31], [N, M]) # [0.2, -1]
+    # goal_state = state_bin_to_lin([71,21], [N, M]) # [7,-2]
+    # init_state_bin = state_lin_to_bin(init_state, [N, M])
+    # goal_state_bin = state_lin_to_bin(goal_state, [N, M])
+    # ############################################################
+
+    init_state = [
+        room_voxels.origin[0] + init_state_bin[0] * grid_pitch,
+        room_voxels.origin[1] + init_state_bin[1] * grid_pitch,
+        random.uniform(0, 2 * np.pi),
+    ]
+    goal_loc = [
+        room_voxels.origin[0] + goal_state_bin[0] * grid_pitch,
+        room_voxels.origin[1] + goal_state_bin[1] * grid_pitch,
+    ]
+
 
     # Sample yaw
     yaw_range = np.pi / 3
@@ -305,7 +332,7 @@ def process_mesh(category_all, task_id, args):
     # Export wall meshes - do not use texture for now since we do not use RGB for training
     wall_path = os.path.join(save_path, 'wall.obj')
     wall = trimesh.util.concatenate([
-        ceiling, left_wall, right_wall, front_wall, back_wall
+        ceiling, left_wall, right_wall, back_wall , #front_wall
     ])
     wall.export(wall_path)
     floor_path = os.path.join(save_path, 'floor.obj')
@@ -329,6 +356,8 @@ def process_mesh(category_all, task_id, args):
     plt.scatter(goal_state_bin[1], goal_state_bin[0], s=10, color='green')
     plt.savefig(os.path.join(save_path, 'task.png'))
     plt.close()
+    grid_path = os.path.join(save_path, 'occupancy_grid.npz')
+    np.savez(grid_path, room_voxels_2d)
 
     # Save task
     task = OmegaConf.create()
@@ -377,25 +406,25 @@ if __name__ == "__main__":
     #     help='use simplified mesh'
     # )
     parser.add_argument(
-        '--num_room', default=100, nargs='?',
+        '--num_room', default=400, nargs='?',
         help='number of rooms to generate'
     )
     parser.add_argument(
         '--num_furniture_per_room', default=5, nargs='?',
-        help='number of furniture per room, default 5'
+        help='number of furniture per room'
     )
     parser.add_argument(
         '--room_dim', default=8, nargs='?', help='room dimension'
     )
     parser.add_argument(
-        '--min_obstacle_spacing', default=1, nargs='?',
+        '--min_obstacle_spacing', default=2, nargs='?',
         help='min obstacle spacing'
     )
     parser.add_argument(
         '--min_init_goal_dist', default=7, nargs='?',
         help='min distance between init position and goal'
     )
-    parser.add_argument('--seed', default=100, nargs='?', help='random seed')
+    parser.add_argument('--seed', default=22, nargs='?', help='random seed')
     args = parser.parse_args()
 
     # cfg
@@ -404,9 +433,9 @@ if __name__ == "__main__":
     random.seed(args.seed)
     np.random.seed(args.seed)
 
-    # super-category: {'Sofa': 2701,'Chair': 1775, 'Lighting': 1921, 'Cabinet/Shelf/Desk': 5725, 'Table': 1090, 'Bed': 1124, 'Pier/Stool': 487, 'Others': 1740}
+    # super-category: {'Sofa': 2701, 'Chair': 1775, 'Lighting': 1921, 'Cabinet/Shelf/Desk': 5725, 'Table': 1090, 'Bed': 1124, 'Pier/Stool': 487, 'Others': 1740}
     category_to_include = ['Chair']  # 'Pier/Stool'
-    style_to_include = ['Modern', 'Industrial']
+    style_to_include = ['Modern']
     theme_to_exclude = ['Cartoon']
     with open(os.path.join(args.mesh_folder, 'model_info.json'), 'r') as f:
         model_info = json.load(f)
@@ -431,7 +460,7 @@ if __name__ == "__main__":
 
     num_processed = 0
     while num_processed < args.num_room:
-        print('Processing task {} out of {}'.format(num_processed+1, args.num_room))
+        print(f'Processing task {num_processed+1} out of {args.num_room}')
         num_processed += process_mesh(
             category_all,
             task_id=num_processed,
