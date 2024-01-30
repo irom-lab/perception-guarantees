@@ -8,13 +8,16 @@ import math
 import IPython as ipy
 import time
 import torch
+import shutil
 
-num_envs = 80
-# cp = 0.02
-cp=0.73
-# cp=0.61
-foldername = "../data/perception-guarantees/rooms_multiple_chairs_with_occlusions/"
+num_envs = 110
+# cp = 0.05
+# cp=0.75
+cp=0.65
+foldername = "../data/perception-guarantees/rooms_multiple/"
 filename = "cp_" + str(cp) + "_10Hz.npz"
+pic_name = "cp" + str(cp) + "traj_plot_10Hz.png"
+dst =  "../data/perception-guarantees/results/"
 goal_loc_planner_frame = [6,7]
 traj = {}
 done= []
@@ -23,6 +26,9 @@ dist_from_goal = 0
 
 for i in range(num_envs):
     file_env = foldername + str(i) + "/" + filename
+    pic_src = foldername + str(i) + "/" + pic_name
+    pic_dst = dst + str(i) +pic_name
+    # shutil.copyfile(pic_src, pic_dst)
     data_ = np.load(file_env, allow_pickle=True)
     traj_info = data_["data"].item()
     # ipy.embed()

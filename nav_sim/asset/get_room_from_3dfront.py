@@ -123,7 +123,7 @@ def process_mesh(category_all, task_id, args):
     piece_saved_bounds = []
     piece_id_all = []
     piece_pos_all = []
-    num_furniture = args.num_furniture_per_room #np.random.randint(args.num_furniture_per_room)+1
+    num_furniture = np.random.randint(args.num_furniture_per_room)+1
     num_occlude = int(np.floor(num_furniture/2))
     while num_furniture_saved < num_furniture:
         category_chosen = random.choice(list(category_all.keys()))
@@ -419,7 +419,7 @@ if __name__ == "__main__":
     #     help='use simplified mesh'
     # )
     parser.add_argument(
-        '--num_room', default=100, nargs='?',
+        '--num_room', default=500, nargs='?',
         help='number of rooms to generate'
     )
     parser.add_argument(

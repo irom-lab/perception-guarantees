@@ -73,14 +73,14 @@ with open("env_params.json", "r") as read_file:
     params = json.load(read_file)
 
 robot_radius = 0.3
-# cp = 0.02
-cp=0.73
-is_finetune=False
+cp = 0.05
+# cp=0.75
+is_finetune=True
 if is_finetune:
-    cp=0.61
+    cp=0.65
 print("CP: ", cp)
 
-foldername = "../data/perception-guarantees/rooms_planning/"
+foldername = "../data/perception-guarantees/rooms_multiple/"
 
 def state_to_planner(state, sp):
     # convert robot state to planner coordinates
@@ -196,7 +196,7 @@ def plan_env(task):
             #     state = env._state
             #     state_traj.append(state_to_planner(state, sp))
             #     t += sp.dt
-        if t >120:
+        if t >140:
             print("Env: ", str(task.env), " Failed")
             break
     plot_results(filename, state_traj , ground_truth, sp)
