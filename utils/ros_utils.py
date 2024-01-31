@@ -128,6 +128,10 @@ class GroundTruthBB():
                 padding_x = 0.28
                 padding_y = 0.29
 
+            elif num ==  11 or num == 12:
+                padding_x = 0.23
+                padding_y = 0.27
+
             bb = [[x - padding_x, y - padding_y], [x + padding_x, y + padding_x]] 
             bb_list.append(bb)
             bb_yaws.append(yaw)

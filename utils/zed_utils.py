@@ -159,7 +159,7 @@ class Zed:
 
         return yaw
 
-    def get_boxes(self, cp=0.4, num_boxes=10):
+    def get_boxes(self, cp=0.4, num_boxes=10, is_finetune=False):
         # Get pointcloud
         # self.zed.retrieve_measure(self.pc, sl.MEASURE.XYZRGBA,sl.MEM.CPU, res)
 
@@ -194,7 +194,7 @@ class Zed:
                     points_ds = preprocess_point_cloud(points, self.num_pc_points)
                     points_ds = points_ds.reshape((batch_size, self.num_pc_points, 3))
                     pc_all = torch.from_numpy(points_ds).to(self.device)
-                    boxes, box_features = self.get_box_from_pc(pc_all, cp, num_boxes, False)
+                    boxes, box_features = self.get_box_from_pc(pc_all, cp, num_boxes,  is_finetune, False)
                 else:
                     points = np.zeros((1,self.num_pc_points, 3),dtype='float32')
                     pc_all = torch.from_numpy(points).to(self.device)
@@ -248,7 +248,7 @@ class Zed:
                 points_ds = preprocess_point_cloud(points, self.num_pc_points)
                 points_ds = points_ds.reshape((batch_size, self.num_pc_points, 3))
                 pc_all = torch.from_numpy(points_ds).to(self.device)
-                boxes, box_features = self.get_box_from_pc(pc_all, cp, num_boxes, False)
+                boxes, box_features = self.get_box_from_pc(pc_all, cp, num_boxes, is_finetune, False)
             else:
                 points = np.zeros((1,self.num_pc_points, 3),dtype='float32')
                 pc_all = torch.from_numpy(points).to(self.device)
@@ -259,7 +259,7 @@ class Zed:
             boxes, box_features = self.get_room_size_box(pc_all)
         return boxes
 
-    def get_box_from_pc(self, pc_all, cp, num_boxes, visualize=False):
+    def get_box_from_pc(self, pc_all, cp, num_boxes, is_finetune=False, visualize=False):
         pc_min_all = pc_all.min(1).values
         pc_max_all = pc_all.max(1).values
         inputs = {'point_clouds': pc_all, 'point_cloud_dims_min': pc_min_all, 'point_cloud_dims_max': pc_max_all}
@@ -267,7 +267,8 @@ class Zed:
         outputs = self.model(inputs)
         box_features = outputs["box_features"].detach()
         box_features_ = torch.reshape(box_features, (1,1,128,256))
-        finetune = self.model_cp(box_features_)
+        if is_finetune:
+            finetune = self.model_cp(box_features_)
         bbox_pred_points = outputs['outputs']['box_corners'].detach().cpu()
         # print(bbox_pred_points.shape)
         cls_prob = outputs["outputs"]["sem_cls_prob"].clone().detach().cpu()
@@ -334,16 +335,19 @@ class Zed:
                     
         if visualize:
             plt.savefig('pointcloud.png')
-        boxes[:,0,:] -= cp
-        boxes[:,1,:] += cp
+        # boxes[:,0,:] -= cp
+        # boxes[:,1,:] += cp
 
         # visualize = True #  TODO: change
         
         #     self.visualize_one_pc_wboxes(pc_all, bbox_pred_points, obj_prob, cls_prob, chair_prob, boxes)
         # ipy.embed()
-        # finetuned_arr = finetune.cpu().detach().numpy()
-        # finetuned_arr = np.squeeze(finetuned_arr)
-        # boxes+=finetuned_arr
+        if is_finetune:
+            finetuned_arr = finetune.cpu().detach().numpy()
+            finetuned_arr = np.squeeze(finetuned_arr)
+            boxes+=finetuned_arr
+        boxes[:,0,:] -= cp
+        boxes[:,1,:] += cp
         return boxes, box_features
 
     def get_room_size_box(self, pc_all):

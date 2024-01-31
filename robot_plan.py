@@ -55,23 +55,24 @@ def plan_loop():
     replan = True # set if want to just follow open loop plan
     save_traj = True  # set if want to save trajectory and compare against plan
     plot_traj = True  # set if want to visualize trajectory at the end of execution
-    result_dir = 'results/debug_trial1/' # set to unique trial identifier if saving results
-    goal_forrestal = [7.0, -2.0, 0.0, 0.0] # goal in forrestal coordinates
-    reachable_file = 'planning/pre_compute/reachable_10Hz.pkl'
-    pset_file = 'planning/pre_compute/Pset_10Hz.pkl'
+    goal_forrestal = [7.0, 2.0, 0.0, 0.5] # goal in forrestal coordinates
+    reachable_file = 'planning/pre_compute/reachable_10Hz_leftgoal.pkl'
+    pset_file = 'planning/pre_compute/Pset_10Hz_leftgoal.pkl'
     num_samples = 2000  # number of samples used for the precomputed files
     dt = 0.1 #   planner dt
-    radius = 0.73 # distance between intermediate goals on the frontier
-    chairs = [1, 2, 4,5,6, 7, 10]  # list of chair labels to be used to get ground truth bounding boxes
+    radius = 0.7 # distance between intermediate goals on the frontier
+    chairs = [1, 2, 3, 4,5,6, 7, 8, 9, 10, 11, 12]  # list of chair labels to be used to get ground truth bounding boxes
     num_detect = 15  # number of boxes for 3DETR to detect
     robot_radius = 0.14
-    cp = 0.73# 0.73#1.19 #1.64
-    sensor_dt = 0.8 # time in seconds to replan
+    cp = 0.73 # 0.73 # 0.61 #0.02
+    sensor_dt = 1.0 # time in seconds to replan
     num_times_detect = 1
     max_search_iter = 2000
+    result_dir = 'results/env30_cp_073/' # set to unique trial identifier if saving results
+    is_finetune = False
     # ****************************************************
     
-    if save_traj:
+    if save_traj: 
         # check directory and overwrite/exit on user input
         dir = check_dir(result_dir)
         if not dir:
@@ -143,7 +144,7 @@ def plan_loop():
     start_idx = np.argmin(cdist(np.array(sp.Pset),state))
     for i in range(num_times_detect):
         st = time.time()
-        boxes = go1.camera.get_boxes(cp, num_detect)
+        boxes = go1.camera.get_boxes(cp, num_detect, is_finetune)
         boxes = boxes[:,:,0:2]
         # print("Boxes before planner transform ",  boxes)
         boxes = boxes_to_planner_frame(boxes, sp)
@@ -189,7 +190,7 @@ def plan_loop():
             replan_states.append([state[0, 0], state[0, 1]])
 
             # print(start_idx,Pset[start_idx],state)
-            boxes = go1.camera.get_boxes(cp, num_detect)
+            boxes = go1.camera.get_boxes(cp, num_detect, is_finetune)
             boxes = boxes[:,:,0:2]
             # print("Boxes before planner transform ",  boxes)
             boxes = boxes_to_planner_frame(boxes, sp)
@@ -239,7 +240,7 @@ def plan_loop():
                 idx_prev = step
                 # print("step: ", step)
                 if step == (end_idx - 1):
-                    action = policy[step] / 2
+                    action = policy[step] / 4
                 else:
                     action = policy[step]
             
@@ -307,7 +308,7 @@ def plan_loop():
             # go1.move(action)
             # time.sleep(sp.dt)
             # t += sp.dt
-        if t > 40:
+        if t > 60:
             # time safety break
             print("BREAK 2: RAN OUT OF TIME")
             break
