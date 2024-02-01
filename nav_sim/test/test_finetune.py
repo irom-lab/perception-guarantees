@@ -88,7 +88,7 @@ with open("env_params.json", "r") as read_file:
     params = json.load(read_file)
 
 def run_env(task):
-    visualize = True
+    visualize = False
     verbose = 0
     init_state = [0,-3.5,0]
     goal_loc = [7.5,3.5]
@@ -153,7 +153,7 @@ def run_step(env, task, x, y, step, visualize=False):
     # t_e_1 = time.time()
     # print("Time to take step and get observation: ", t_e_1 - t_s)
     num_chairs = len(task.piece_bounds_all) # Number of chairs in the current environment
-    num_boxes = 15 # Number of boxes we want to predict using 3DETR
+    num_boxes = 3 # Number of boxes we want to predict using 3DETR
 
     task.observation.camera_pos[step] = [float(env.lidar_pos[0]), float(env.lidar_pos[1]), float(env.lidar_pos[2])]
     pos = task.observation.camera_pos[step]
@@ -513,7 +513,7 @@ if __name__ == '__main__':
     num_envs = 100
 
     # Number of parallel threads
-    num_parallel = 1
+    num_parallel = 10
     ##################################################################
 
     # _, _, _ = render_env(seed=0)
@@ -529,7 +529,7 @@ if __name__ == '__main__':
         # save_tasks += [task]
         env += 1 
         if env%batch_size == 0:
-            if env==391: #410: # In case code stops running, change starting environment to last batch saved
+            if env>400: #410: # In case code stops running, change starting environment to last batch saved
 
                 batch = math.floor(env/batch_size)
                 print("Saving batch", str(batch))
@@ -547,10 +547,10 @@ if __name__ == '__main__':
                 print("Time to generate results: ", t_end - t_start)
                 ##########################################################################
                 model_outputs_all, bboxes_ground_truth_aligned, loss_mask, match_outputs_gt = format_results(results)
-                torch.save(model_outputs_all, "data/dataset_intermediate/features15_cal_variable_chairs"+str(batch) + ".pt")
-                torch.save(bboxes_ground_truth_aligned, "data/dataset_intermediate/bbox_labels15_cal_variable_chairs"+str(batch) + ".pt")
-                torch.save(loss_mask, "data/dataset_intermediate/loss_mask15_cal_variable_chairs"+str(batch) + ".pt")
-                torch.save(match_outputs_gt, "data/dataset_intermediate/finetune15_cal_variable_chairs"+str(batch) + ".pt")
+                torch.save(model_outputs_all, "data/dataset_intermediate/features15_occlusion_cal"+str(batch) + ".pt")
+                torch.save(bboxes_ground_truth_aligned, "data/dataset_intermediate/bbox_labels15_occlusion_cal"+str(batch) + ".pt")
+                torch.save(loss_mask, "data/dataset_intermediate/loss_mask15_occlusion_cal"+str(batch) + ".pt")
+                torch.save(match_outputs_gt, "data/dataset_intermediate/finetune15_occlusion_cal"+str(batch) + ".pt")
 
             #     ii = 0
             #     for result in results.get():
@@ -565,15 +565,15 @@ if __name__ == '__main__':
     #################################################################
 
     # model_outputs_all, bboxes_ground_treuth_aligned, loss_mask, match_outputs_gt = format_results(save_res)
-    filenames = ["data/dataset_intermediate/features15_cal_variable_chairs", "data/dataset_intermediate/bbox_labels15_cal_variable_chairs", "data/dataset_intermediate/loss_mask15_cal_variable_chairs", "data/dataset_intermediate/finetune15_cal_variable_chairs"]
+    filenames = ["data/dataset_intermediate/features15_occlusion_cal", "data/dataset_intermediate/bbox_labels15_occlusion_cal", "data/dataset_intermediate/loss_mask15_occlusion_cal", "data/dataset_intermediate/finetune15_occlusion_cal"]
     model_outputs_all, bboxes_ground_truth_aligned, loss_mask, match_outputs_gt = combine_old_files(filenames, 40, 10)
     ###########################################################################
     # # Save processed feature data
-    torch.save(model_outputs_all, "data/features15_cal_variable_chairs.pt")
+    torch.save(model_outputs_all, "data/features15_occlusion_cal.pt")
     # # Save ground truth bounding boxes
-    torch.save(bboxes_ground_truth_aligned, "data/bbox_labels15_cal_variable_chairs.pt")
+    torch.save(bboxes_ground_truth_aligned, "data/bbox_labels15_occlusion_cal.pt")
     # # Save loss mask
-    torch.save(loss_mask, "data/loss_mask15_cal_variable_chairs.pt")
+    torch.save(loss_mask, "data/loss_mask15_occlusion_cal.pt")
     # # Save all box outputs for finetuning
-    torch.save(match_outputs_gt, "data/finetune15_cal_variable_chairs.pt")
+    torch.save(match_outputs_gt, "data/finetune15_occlusion_cal.pt")
     ###########################################################################

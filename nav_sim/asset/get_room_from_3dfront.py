@@ -28,8 +28,8 @@ def process_mesh(category_all, task_id, args):
     max_init_goal_attempt = 2000
     max_obs_attempt = 2000
     grid_pitch = 0.10
-    free_init_radius = [int(3/ grid_pitch), int(1/ grid_pitch)] #int(1 / grid_pitch)
-    free_goal_radius = [int(2/ grid_pitch),int(1/ grid_pitch)] #int((0.75) / grid_pitch)
+    free_init_radius = [int(2/ grid_pitch), int(1/ grid_pitch)] #int(1 / grid_pitch)
+    free_goal_radius = [int(1/ grid_pitch),int(1/ grid_pitch)] #int((0.75) / grid_pitch)
     min_init_goal_grid = int(args.min_init_goal_dist / grid_pitch)
 
     # Room dimensions
@@ -279,11 +279,11 @@ def process_mesh(category_all, task_id, args):
             continue
 
         # Check if there is no obstacle between init and goal
-        # points = get_grid_cells_btw(init_state_bin, goal_state_bin)
-        # points_voxel = [room_voxels_2d[point[0], point[1]] for point in points]
-        # if sum(points_voxel) < 5:
-        #     print('Not enough obstacle')
-        #     continue
+        points = get_grid_cells_btw(init_state_bin, goal_state_bin)
+        points_voxel = [room_voxels_2d[point[0], point[1]] for point in points]
+        if sum(points_voxel) < 5:
+            print('Not enough obstacle')
+            continue
         break
     if init_goal_attempt == max_init_goal_attempt:
         # print('no init/goal found')
@@ -410,7 +410,7 @@ if __name__ == "__main__":
         help='number of rooms to generate'
     )
     parser.add_argument(
-        '--num_furniture_per_room', default=5, nargs='?',
+        '--num_furniture_per_room', default=1, nargs='?',
         help='number of furniture per room'
     )
     parser.add_argument(
