@@ -32,9 +32,9 @@ except RuntimeError:
 
 from models.model_perception import MLPModelDet
 
-f = open('planning/reachable_10Hz.pkl', 'rb')
+f = open('planning/pre_compute/reachable_10Hz.pkl', 'rb')
 reachable = pickle.load(f)
-f = open('planning/Pset_10Hz.pkl', 'rb')
+f = open('planning/pre_compute/Pset_10Hz.pkl', 'rb')
 Pset = pickle.load(f)
 dt = 0.1
 print("dt=", dt)
@@ -73,9 +73,17 @@ with open("env_params.json", "r") as read_file:
     params = json.load(read_file)
 
 robot_radius = 0.3
-cp = 0.05
-# cp=0.75
-is_finetune=True
+# cp = 0.05 # 85%
+cp=0.75 # 85%
+# cp = 1.33 # 95%
+# cp = 0.101 # 95%
+# cp = 0.83 # 90%
+# cp = 0.066 # 90%
+# cp = 0.68 # 80%
+# cp = 0.025 # 80%
+# cp = 0.63 # 75%
+# cp = 0.016 # 75%
+is_finetune=False
 if is_finetune:
     cp=0.65
 print("CP: ", cp)
@@ -101,7 +109,7 @@ def boxes_to_planner_frame(boxes, sp):
 
 def plan_env(task):
     # initialize planner
-    visualize = False
+    visualize = True
     task.goal_radius = 1.0
     filename = foldername + str(task.env) + '/cp' + str(cp)
     grid_data = np.load((foldername + str(task.env) + '/occupancy_grid.npz'), allow_pickle=True)
@@ -114,7 +122,7 @@ def plan_env(task):
     # task.init_state = [float(v) for v in init_state]
     # task.goal_loc = [float(v) for v in goal_loc]
     planner_init_state = [5,0.2,0,0]
-    sp = Safe_Planner(init_state=planner_init_state, FoV=70*np.pi/180, n_samples=2000,dt=dt,radius = 0.1, sensor_dt=0.5, max_search_iter=2000)
+    sp = Safe_Planner(init_state=planner_init_state, FoV=70*np.pi/180, n_samples=2000,dt=dt,radius = 0.1, sensor_dt=0.2, max_search_iter=2000)
     sp.load_reachable(Pset, reachable)
     env.dt = sp.dt
     env.reset(task)
@@ -149,7 +157,7 @@ def plan_env(task):
         t+=(time.time() - st)
         if (steps_taken % 1) == 0 and visualize:
             # sp.show_connection(res[0]) 
-            sp.world.free_space
+            sp.world.show(true_boxes=ground_truth)
             sp.show(res[0], true_boxes=np.array(ground_truth))
         steps_taken+=1
         if len(res[0]) > 1 and not done and not collided:
@@ -423,7 +431,7 @@ if __name__ == '__main__':
     num_envs = 100
 
     # Number of parallel threads
-    num_parallel = 10
+    num_parallel = 1
     ##################################################################
 
     # _, _, _ = render_env(seed=0)
@@ -441,7 +449,7 @@ if __name__ == '__main__':
         # save_tasks += [task]
         env += 1 
         if env%batch_size == 0:
-            if env >0: # In case code stops running, change starting environment to last batch saved
+            if env == 9: # In case code stops running, change starting environment to last batch saved
                 batch = math.floor(env/batch_size)
                 print("Saving batch", str(batch))
                 t_start = time.time()

@@ -18,11 +18,19 @@ from planning.utils import turn_box, non_det_filter, filter_reachable
 [k1, k2, A, B, R, BRB] = pickle.load(open('planning/sp_var.pkl','rb'))
 expA = expm(A*10**3)
 
+blue = (31/255, 119/255,180/255, 0.5)
+dark_blue = (0/255, 119/255,180/255, 1)
+
+dark_orange = (255/255, 66/255, 15/255, 1)
+orange = (255/255, 127/255, 14/255, 0.5)
+yellow = (255/255, 242/255, 0/255, 0.5)
+
 class World:
     def __init__(self, world_box):
         self.w = world_box[1,0] - world_box[0,0]
         self.h = world_box[1,1] - world_box[0,1]
-        # self.occ_space = np.array([])
+        self.occ_space = None
+        self.old_occ_space = None
         self.counter = 0
         self.free_space = None
         self.free_space_new = None
@@ -32,8 +40,10 @@ class World:
         new_occ_space = np.array(new_boxes)
         if self.counter == 0:
             self.box_space = unary_union(turn_box(new_boxes))
+            self.box_space = self.box_space.difference(self.free_space)
         else:
             self.box_space = non_det_filter(self.box_space, new_occ_space)
+
         self.occ_space = unary_union(turn_box(new_boxes))
         # self.box_space = Polygon([[0,0],[0,self.h],[self.w,self.h],[self.w,0],[0,0]]).intersection(self.box_space)
         world_polygon = Polygon([[0,0],[8,0],[8,8],[0,8],[0,0]])
@@ -48,6 +58,7 @@ class World:
         
         self.box_space.simplify(1e-3)
         self.box_space = MultiPolygon([orient(s, sign=-1.0) for s in self.box_space.geoms if s.geom_type == 'Polygon'])
+
 
         self.counter += 1
 
@@ -66,7 +77,7 @@ class World:
         # x_brake = 0.12512712
         # y_brake = 0.1972604
         new_state = expA@state
-        if self.isValid(new_state[0]):
+        if self.isValid(new_state):
             return True
 
         # x_brake = state[2]/k1
@@ -85,38 +96,59 @@ class World:
         ax.set_xlim([0,self.w])
         ax.set_ylim([0,self.h])
         ax.set_aspect('equal')
-        if true_boxes is not None:
-            for box in true_boxes:
-                ax.add_patch(Rectangle((box[0,0],box[0,1]),box[1,0]-box[0,0],box[1,1]-box[0,1],edgecolor = 'k',fc=(1,0,0,0.8)))
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
+        ax.spines['top'].set_linestyle(':')
+        ax.spines['top'].set_linewidth(2)
+        ax.spines['right'].set_linestyle(':')
+        ax.spines['right'].set_linewidth(2)
+        ax.spines['bottom'].set_linestyle(':')
+        ax.spines['bottom'].set_linewidth(2)
+        ax.spines['left'].set_linestyle(':')
+        ax.spines['left'].set_linewidth(2)
+
+        
         if self.occ_space.geom_type == 'Polygon':
             self.occ_space = MultiPolygon([self.occ_space])
-        for geom in self.occ_space.geoms:
-            xs, ys = geom.exterior.xy
-            ax.fill(xs,ys, fc=(1,0,0,0.3))
-        # for geom in self.box_space.geoms:
+        # for geom in self.occ_space.geoms:
         #     xs, ys = geom.exterior.xy
-        #     ax.fill(xs,ys, fc=(1,1,0,0.9))
+        #     ax.fill(xs,ys, edgecolor = dark_orange, linestyle = '--', fc = orange)
+        #     # ax.fill(xs, ys, fc = (255/255,195/255,37/255,0.3))
+        for geom in self.box_space.geoms:
+            xs, ys = geom.exterior.xy
+            ax.fill(xs,ys, edgecolor = dark_orange, linestyle = '--', fc=orange)
+        # if self.old_occ_space is not None:
+        #     for geom in self.old_occ_space.geoms:
+        #         xs, ys = geom.exterior.xy
+        #         ax.fill(xs,ys, edgecolor = dark_orange, linestyle = '--', fc = orange)
         # if self.free_space_new is not None:
         #     if self.free_space_new.geom_type == 'Polygon':
         #         xs, ys = self.free_space_new.exterior.xy
-        #         ax.fill(xs,ys, edgecolor = 'k', linestyle='--', fc = (0,0,0,0))
+        #         ax.fill(xs,ys, edgecolor = 'k', linestyle='--', fc = blue)
         #     else:
         #         for geom in self.free_space_new.geoms:
         #             if geom.geom_type == 'Polygon':
         #                 xs, ys = geom.exterior.xy
-        #                 ax.fill(xs,ys, edgecolor = 'k', linestyle='--', fc = (0,0,0,0))
+        #                 ax.fill(xs,ys, edgecolor = 'k', linestyle='--', fc = blue)
         #             else:
         #                 print('plotting problem:', geom.geom_type)
         if self.free_space is not None:
             if self.free_space.geom_type == 'Polygon':
                 xs, ys = self.free_space.exterior.xy
-                ax.fill(xs,ys, edgecolor = 'k',fc=(0, 0.4470, 0.7410,0.5))
+                ax.fill(xs,ys, edgecolor = 'k',fc=blue)
             elif self.free_space.geom_type == 'MultiPolygon':
                 for geom in self.free_space.geoms:
                     xs, ys = geom.exterior.xy
                     ax.fill(xs,ys, edgecolor = 'k',fc=(0, 0.4470, 0.7410,0.5))
             else:
                 print(self.free_space.geom_type)
+        
+        if true_boxes is not None:
+            for box in true_boxes:
+                ax.add_patch(Rectangle((box[0,0],box[0,1]),box[1,0]-box[0,0],box[1,1]-box[0,1],edgecolor = 'k',linewidth = 2, fc='k'))
+
         return fig, ax
     
 class Safe_Planner:
@@ -490,15 +522,23 @@ class Safe_Planner:
                             [state[0,0]+self.FoV_close,state[0,1]+self.FoV_close],
                             [state[0,0]-self.FoV_close,state[0,1]+self.FoV_close],
                             [state[0,0]-self.FoV_close,state[0,1]-self.FoV_close]])
-        if sense_range <= self.world_box[1,1]:
-            new_boxes = np.append(new_boxes,toofar,axis=0)
-    
+        toofar_polygon = Polygon([[self.world_box[0,0],sense_range],
+                                  [self.world_box[1,0],sense_range],
+                                  [self.world_box[1,0],self.world_box[1,1]],
+                                  [self.world_box[0,0],self.world_box[1,1]],
+                                  [self.world_box[0,0],sense_range]])
+        # if sense_range <= self.world_box[1,1]:
+        #     new_boxes = np.append(new_boxes,toofar,axis=0)
+        if self.world.occ_space is not None:
+            self.world.old_occ_space = self.world.occ_space
+
         self.world.update(new_boxes)
         # occlusion
         if self.world.occ_space.contains(Point(state[0,0],state[0,1])) == False:
             self.world.free_space_new = self.occlusion(state[0])
             if self.world.free_space_new is not None:
                 self.world.free_space_new = self.world.free_space_new.difference(tooclose)
+                self.world.free_space_new = self.world.free_space_new.difference(toofar_polygon)
                 if self.world.free_space_new.is_valid:            
                     self.world.free_space = self.world.free_space.union(self.world.free_space_new)
                     self.world.free_space.simplify(1e-5)
@@ -618,27 +658,28 @@ class Safe_Planner:
 
         if len(idxset_cand) == 0:
             pass
+        else:
 
-        # ymin <- argmin cost(y) + dist(y,x)
-        idx_incand_costmin = np.argmin(self.cost[idxset_cand] + distset_cand) #index in cand set
-        cost_new = min(self.cost[idxset_cand] + distset_cand)
-        time_new = timeset_cand[idx_incand_costmin]
-        idx_parent = idxset_cand[idx_incand_costmin]
-        idx_nearinparentfset = self.reachable[idx_parent][1][0].index(idx_near)
-        x_waypoints = self.reachable[idx_parent][1][3][idx_nearinparentfset][0]
-        
-        # check trajectory is collision-free
-        if self.world.isValid_multiple(x_waypoints):
-            # check ICS before sensor update
-            if self.time_to_come[idx_parent] + time_new <= self.sensor_dt:
-                connect = True
-                for x_waypoint in x_waypoints[0:int(np.floor(self.sensor_dt/self.dt))]:
-                    if not self.world.isICSfree(x_waypoint):
-                        connect = False
-                if connect:
+            # ymin <- argmin cost(y) + dist(y,x)
+            idx_incand_costmin = np.argmin(self.cost[idxset_cand] + distset_cand) #index in cand set
+            cost_new = min(self.cost[idxset_cand] + distset_cand)
+            time_new = timeset_cand[idx_incand_costmin]
+            idx_parent = idxset_cand[idx_incand_costmin]
+            idx_nearinparentfset = self.reachable[idx_parent][1][0].index(idx_near)
+            x_waypoints = self.reachable[idx_parent][1][3][idx_nearinparentfset][0]
+            
+            # check trajectory is collision-free
+            if self.world.isValid_multiple(x_waypoints):
+                # check ICS before sensor update
+                if self.time_to_come[idx_parent] + time_new <= self.sensor_dt:
+                    connect = True
+                    for x_waypoint in x_waypoints[0:int(np.floor(self.sensor_dt/self.dt))]:
+                        if not self.world.isICSfree(x_waypoint):
+                            connect = False
+                    if connect:
+                        self.connect(idx_near,cost_new,time_new,idx_parent)
+                elif self.time_to_come[idx_parent] + time_new > self.sensor_dt:
                     self.connect(idx_near,cost_new,time_new,idx_parent)
-            elif self.time_to_come[idx_parent] + time_new > self.sensor_dt:
-                self.connect(idx_near,cost_new,time_new,idx_parent)
 
 
     def connect(self,idx_near, cost_new, time_new, idx_parent):

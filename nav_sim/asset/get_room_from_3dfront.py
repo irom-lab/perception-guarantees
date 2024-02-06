@@ -84,36 +84,36 @@ def process_mesh(category_all, task_id, args):
         [0, 0, 1, room_height / 2],
         [0, 0, 0, 1],
     ]
-    # front_wall = trimesh.creation.box(
-    #     [0.1, args.room_dim + 0.2, room_height + 0.2],
-    #     front_wall_transform_matrix,
-    # )
+    front_wall = trimesh.creation.box(
+        [0.1, args.room_dim + 0.2, room_height + 0.2],
+        front_wall_transform_matrix,
+    )
     back_wall_transform_matrix = [
         [1, 0, 0, -0.05],
         [0, 1, 0, 0],
         [0, 0, 1, room_height / 2],
         [0, 0, 0, 1],
     ]
-    back_wall = trimesh.creation.box(
-        [0.1, args.room_dim + 0.2, room_height + 0.2],
-        back_wall_transform_matrix,
-    )
+    # back_wall = trimesh.creation.box(
+    #     [0.1, args.room_dim + 0.2, room_height + 0.2],
+    #     back_wall_transform_matrix,
+    # )
     ceiling_transform_matrix = [
         [1, 0, 0, args.room_dim / 2],
         [0, 1, 0, 0],
         [0, 0, 1, room_height + 0.05],
         [0, 0, 0, 1],
     ]
-    ceiling = trimesh.creation.box(
-        [args.room_dim, args.room_dim, 0.1],
-        ceiling_transform_matrix,
-    )
+    # ceiling = trimesh.creation.box(
+    #     [args.room_dim, args.room_dim, 0.1],
+    #     ceiling_transform_matrix,
+    # )
     room = trimesh.util.concatenate([
         floor,
         left_wall,
         right_wall,
-        # front_wall,
-        back_wall,
+        front_wall,
+        # back_wall,
     ])
     # room.show()
 
@@ -345,7 +345,7 @@ def process_mesh(category_all, task_id, args):
     # Export wall meshes - do not use texture for now since we do not use RGB for training
     wall_path = os.path.join(save_path, 'wall.obj')
     wall = trimesh.util.concatenate([
-        ceiling, left_wall, right_wall, back_wall , #front_wall
+         left_wall, right_wall, front_wall
     ])
     wall.export(wall_path)
     floor_path = os.path.join(save_path, 'floor.obj')
@@ -419,7 +419,7 @@ if __name__ == "__main__":
     #     help='use simplified mesh'
     # )
     parser.add_argument(
-        '--num_room', default=500, nargs='?',
+        '--num_room', default=10, nargs='?',
         help='number of rooms to generate'
     )
     parser.add_argument(

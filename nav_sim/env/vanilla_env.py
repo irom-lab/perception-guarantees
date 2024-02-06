@@ -12,6 +12,7 @@ import pybullet as pb
 from pybullet_utils import bullet_client as bc
 
 from nav_sim.util.misc import rgba2rgb
+from robot_descriptions.loaders.pybullet import load_robot_description
 
 k1=3.968; k2=2.517; k3=0.1353; k4=-0.5197; k5 = 4.651; k6 = 2.335
 print("Controller gains, k1", k1, " k2 ", k2, " k3 ", k3, " k4 ", k4, " k5 ", k5, " k6 ", k6)
@@ -38,7 +39,7 @@ class VanillaEnv():
         self.room_dim = 8
         self.wall_thickness = 0.1
         self.wall_height = 4
-        self.ground_rgba = [0.8, 0.8, 0.8, 1.0]
+        self.ground_rgba = [175/255, 175/255, 175/255, 1.0]
         self.back_wall_rgba = [199 / 255, 182 / 255, 191 / 255, 1.0]
         self.left_wall_rgba = [199 / 255, 182 / 255, 191 / 255, 1.0]
         self.right_wall_rgba = [199 / 255, 182 / 255, 191 / 255, 1.0]
@@ -46,7 +47,7 @@ class VanillaEnv():
 
         # Robot dimensions TODO: get Go1 dimensions
         self.robot_half_dim = [0.323, 0.14, 0.2]
-        self.robot_com_height = self.robot_half_dim[2]
+        self.robot_com_height = self.robot_half_dim[2]+0.3
         self.lidar_height = 0.15
         self.camera_thickness = 0.04
 
@@ -403,23 +404,23 @@ class VanillaEnv():
         # )
 
         # Build camera and LiDAR visualization if render
-        if self.render:
-            camera_visual_id = p.createVisualShape(
-                p.GEOM_BOX, rgbaColor=[0, 0.8, 0, 1.0],
-                halfExtents=[0.03, 0.20, 0.05]
-            )
-            self.camera_id = p.createMultiBody(
-                baseMass=0, baseCollisionShapeIndex=-1,
-                baseVisualShapeIndex=camera_visual_id, basePosition=[0, 0, 0]
-            )
-            lidar_visual_id = p.createVisualShape(
-                p.GEOM_CYLINDER, rgbaColor=[0, 0.8, 0, 1.0], radius=0.08,
-                length=self.lidar_height
-            )
-            self.lidar_id = p.createMultiBody(
-                baseMass=0, baseCollisionShapeIndex=-1,
-                baseVisualShapeIndex=lidar_visual_id, basePosition=[0, 0, 0]
-            )
+        # if self.render:
+        #     camera_visual_id = p.createVisualShape(
+        #         p.GEOM_BOX, rgbaColor=[0, 0.8, 0, 1.0],
+        #         halfExtents=[0.03, 0.20, 0.05]
+        #     )
+        #     self.camera_id = p.createMultiBody(
+        #         baseMass=0, baseCollisionShapeIndex=-1,
+        #         baseVisualShapeIndex=camera_visual_id, basePosition=[0, 0, 0]
+        #     )
+        #     lidar_visual_id = p.createVisualShape(
+        #         p.GEOM_CYLINDER, rgbaColor=[0, 0.8, 0, 1.0], radius=0.08,
+        #         length=self.lidar_height
+        #     )
+        #     self.lidar_id = p.createMultiBody(
+        #         baseMass=0, baseCollisionShapeIndex=-1,
+        #         baseVisualShapeIndex=lidar_visual_id, basePosition=[0, 0, 0]
+        #     )
 
         # Initialize obstacle id list - excluding walls and floors
         self._obs_id_all = []
@@ -506,18 +507,19 @@ class VanillaEnv():
                 ornObj=self._p.getQuaternionFromEuler([0, 0, yaw])
             )
         else:
-            robot_visual_id = self._p.createVisualShape(
-                self._p.GEOM_BOX, halfExtents=self.robot_half_dim,
-                rgbaColor=[0.5, 0.5, 0.5, 1]
-            )
-            self.robot_id = self._p.createMultiBody(
-                baseMass=0,  # static
-                baseVisualShapeIndex=robot_visual_id,
-                basePosition=np.append(state[:2], self.robot_com_height),
-                baseOrientation=self._p.getQuaternionFromEuler([
-                    0, 0, yaw
-                ])
-            )
+            self.robot_id = load_robot_description('go1_description')
+            # robot_visual_id = self._p.createVisualShape(
+            #     self._p.GEOM_BOX, halfExtents=self.robot_half_dim,
+            #     rgbaColor=[0.5, 0.5, 0.5, 1]
+            # )
+            # self.robot_id = self._p.createMultiBody(
+            #     baseMass=0,  # static
+            #     baseVisualShapeIndex=robot_visual_id,
+            #     basePosition=np.append(state[:2], self.robot_com_height),
+            #     baseOrientation=self._p.getQuaternionFromEuler([
+            #         0, 0, yaw
+            #     ])
+            # )
 
     def move_robot(self, action, state):
         """
@@ -609,15 +611,15 @@ class VanillaEnv():
         ])
 
         # Update visuals
-        if self.render:
-            self._p.resetBasePositionAndOrientation(
-                self.camera_id, posObj=self.cam_pos_center,
-                ornObj=self._p.getQuaternionFromEuler([0, 0, yaw])
-            )
-            self._p.resetBasePositionAndOrientation(
-                self.lidar_id, posObj=self.lidar_pos,
-                ornObj=self._p.getQuaternionFromEuler([0, 0, 0])
-            )
+        # if self.render:
+        #     self._p.resetBasePositionAndOrientation(
+        #         self.camera_id, posObj=self.cam_pos_center,
+        #         ornObj=self._p.getQuaternionFromEuler([0, 0, yaw])
+        #     )
+        #     self._p.resetBasePositionAndOrientation(
+        #         self.lidar_id, posObj=self.lidar_pos,
+        #         ornObj=self._p.getQuaternionFromEuler([0, 0, 0])
+        #     )
 
     def seed(self, seed=0):
         """
