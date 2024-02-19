@@ -295,7 +295,6 @@ def scale_prediction_average(
     idx = math.ceil((B+1)*(tol))-1
     
     idx = math.ceil((B+1)*(tol))-1
-    ipy.embed()
     return delta[idx]
 
 # if __name__=='__main__':
