@@ -1,8 +1,8 @@
 """
-Test the navigation simulation with the task dataset.
+Generate the navigation simulation and the calibration dataset with the task dataset.
 
 Please contact the author(s) of this library if you have any questions.
-Authors: Allen Z. Ren (allen.ren@princeton.edu)
+Authors: Anushri Dixit (anushri.dixit@princeton.edu), Allen Z. Ren (allen.ren@princeton.edu)
 """
 
 import os
@@ -78,7 +78,6 @@ x = [sample[1] for sample in s]
 y = [sample[0]-4 for sample in s]
 
 num_steps = len(x)
-# print("Num steps: ", num_steps)
 
 # Load params from json file
 with open("env_params.json", "r") as read_file:
@@ -103,20 +102,9 @@ def run_env(task):
     # Change seed if you want
     # np.random.default_rng(12345)
 
-    # num_steps = 1000 # 500 #1000
-    # x = np.random.uniform(0.05,7.95,num_steps)
-    # y = np.random.uniform(-3.95,3.95,num_steps)
-
-    # Press any key to start
-    # print("\n=========================================")
-    # input("Press any key to start")
-    # print("=========================================\n")
-
     # Run
-    # for step in range(16*4):
     gt_obs = [[[-obs[4], obs[0], obs[2]],[-obs[1], obs[3], obs[5]]] for obs in task.piece_bounds_all]
     for step in range(num_steps):
-        # print(step)
         # Execute action
         task, bb, box_features, output, matched_gt = run_step(env, task, x, y, step, visualize)
         camera_pos.append(task.observation.camera_pos[step])
@@ -127,10 +115,8 @@ def run_env(task):
         # Append box features
         if step == 0:
             all_box_features = torch.clone(box_features)
-            # print(all_box_features.shape)
         else:
             all_box_features = torch.cat((all_box_features, box_features), 0)
-            # print(all_box_features.shape)
 
         # Convert from camera frame to world frame
         is_visible.append(task.observation.is_visible[step])
@@ -145,10 +131,7 @@ def run_env(task):
 
 def run_step(env, task, x, y, step, visualize=False):
     action  = [x[step],y[step],0]
-    # t_s = time.time()
     observation, reward, done, info = env.step(action)
-    # t_e_1 = time.time()
-    # print("Time to take step and get observation: ", t_e_1 - t_s)
     num_chairs = len(task.piece_bounds_all) # Number of chairs in the current environment
     num_boxes = 15 # Number of boxes we want to predict using 3DETR
 
@@ -159,27 +142,16 @@ def run_step(env, task, x, y, step, visualize=False):
     task.observation.cam_not_inside_obs[step] = all([True if any(obs) == 1 else False for obs in not_inside_xyz])
     is_vis = [False]*num_chairs
     
-    # Filter points with z < 0.01 and abs(y) > 3.5 and x> 0.01 and within a 1m distance of the robot
+    # Filter points with z < 0.01 and abs(y) > 3.9 and x> 0.05
     observation = observation[:, observation[2, :] < 2.9]
-    # observation = observation[:, np.abs(observation[1, :]) < 3.9]
-    # observation = observation[:, observation[0, :] > 0.05]
-    # observation = observation[:, observation[0, :] < 7.95]
 
     X = observation[:, (observation[2, :] >0.1)]
     X = X[:, np.abs(X[1,:]) < 3.9]
     X = X[:, X[0,:]>0.05]
     X = X[:, X[0,:] < 7.95]
-    # X = observation[:, ((observation[0,:]-pos[0])**2 + (observation[1,:]-pos[1])**2)**0.5 > 1]
-    # X = X[:, ((X[0,:]-pos[0])**2 + (X[1,:]-pos[1])**2)**0.5 < 8]
     
     X = np.transpose(np.array(X))
     if(len(X) > 0):
-        # print(len(X))
-        # X = random_sampling(X, 5000)
-    #     cluster_centers = cluster(X, visualize)
-    #     for obs_idx, obs in enumerate(task.piece_bounds_all):
-    #         # even "just outside" the box is acceptable as a cluster center, we'd rather be more conservative (-+)
-    #         is_vis[obs_idx] = (any([all([cc[i]>obs[i]+0.2 and cc[i]<obs[3+i]-0.2 for i in range(2)]) for cc in cluster_centers]) and task.observation.cam_not_inside_obs[step])
         is_vis = is_box_visible(X, task.piece_bounds_all, visualize)
         for obs_idx, obs in enumerate(task.piece_bounds_all):
             is_vis[obs_idx] = (is_vis[obs_idx] and task.observation.cam_not_inside_obs[step])
@@ -191,46 +163,26 @@ def run_step(env, task, x, y, step, visualize=False):
         points_ = pc_cam_to_3detr(np.transpose(np.array(observation)))
         points = np.zeros((1,num_pc_points, 3),dtype='float32')
         points = preprocess_point_cloud(np.array(points_), num_pc_points)
-        # print(points.shape)
         # Get bounding boxes
         pc = np.array(points).astype('float32')
         pc = pc.reshape((1, num_pc_points, 3))
         pc_all = torch.from_numpy(pc).to(device)
-        # t_s = time.time()
         output, box_features = get_box(pc_all, num_chairs, num_boxes)
-        # t_e_1 = time.time()
         bb = match_gt_output_boxes(output, np.array(gt_obs), is_vis)
-        matched_gt = match_output_gt_boxes(output, np.array(gt_obs), is_vis) 
-        # t_e_2 = time.time()
-        # print("Time to generate boxes ", t_e_1 - t_s)
-        # print("Time to match boxes to ground truth ", t_e_2 - t_e_1)
-        bbnp = np.array(bb)
-        gtnp = np.array(gt_obs)
-        visnp = np.array(is_vis)
-        if (any(visnp) and ((bbnp[visnp!=0,0,:]-gtnp[visnp!=0,0,:]>1).any() or (gtnp[visnp!=0,1,:]-bbnp[visnp!=0,1,:]>1).any())):
-            print(step, len(observation[0]))
-            # plot_box_pc(pc, bbnp, gtnp, is_vis)
-            # plot_box_pc(pc, np.array(output), gtnp, is_vis)
+        matched_gt = match_output_gt_boxes(output, np.array(gt_obs), is_vis)
     else:
         # There are no returns from the LIDAR, object is not visible
-        # print("Trying again... ")
         points = np.zeros((1,num_pc_points, 3),dtype='float32')
         task.observation.is_visible[step] = [False]*num_chairs
-        # print(points.shape)
         pc_all = torch.from_numpy(points).to(device)
         bb, _ = get_room_size_box(pc_all, num_chairs)
         output, box_features = get_room_size_box(pc_all, num_boxes)
         matched_gt = match_output_gt_boxes(output, np.array(gt_obs), is_vis) 
-        # observation = tuple(map(tuple, observation))
-        # observation = [[float(observation[i][j]) for j in range(len(observation[i]))] for i in range(3)]
-        # task.observation.lidar[step] = observation
     return task, bb, box_features, output, matched_gt
 
 def get_room_size_box(pc_all, num_boxes):
     room_size = 8
-    # num_chairs =5
     boxes = np.zeros((num_boxes, 2,3))
-    # box = torch.tensor(pc_to_axis_aligned_rep(bbox_pred_points.numpy()))
     boxes[:,0,1] = 0*np.ones_like(boxes[:,0,0])
     boxes[:,0,0] = (-room_size/2)*np.ones_like(boxes[:,0,1])
     boxes[:,0,2] = 0*np.ones_like(boxes[:,0,2])
@@ -254,12 +206,7 @@ def get_box(pc_all, num_chairs, num_boxes):
 
     outputs = model(inputs)
     bbox_pred_points = outputs['outputs']['box_corners'].detach().cpu()
-    # print(bbox_pred_points.shape)
     cls_prob = outputs["outputs"]["sem_cls_prob"].clone().detach().cpu()
-
-    # model_outputs_all["box_corners"][env,batch_inds,:,:] = outputs["outputs"]["box_corners"].detach().cpu()
-    # model_outputs_all["box_features"][env,batch_inds,:,:] = outputs["box_features"].detach().cpu()
-
     box_features = outputs["box_features"].detach().cpu()
 
     chair_prob = cls_prob[:,:,3]
@@ -267,7 +214,6 @@ def get_box(pc_all, num_chairs, num_boxes):
     sort_box = torch.sort(obj_prob,1,descending=True)
 
     num_probs = 0
-    # num_boxes = 15
     corners = np.zeros((num_boxes, 2,3))
     if np.any(np.isnan(np.array(bbox_pred_points))):
         return get_room_size_box(pc_all, num_boxes)
@@ -277,7 +223,6 @@ def get_box(pc_all, num_chairs, num_boxes):
             prob = prob.numpy()
             bbox = bbox_pred_points[0, sorted_idx, :, :]
             cc = pc_to_axis_aligned_rep(bbox.numpy())
-            # print(cc)
             flag = False
             if num_probs == 0:
                 corners[num_probs,:,:] = cc
@@ -306,15 +251,12 @@ def match_gt_output_boxes(output_boxes, ground_truth, is_visible):
                 pred = (pred_[0,0], pred_[0,1], pred_[1,0], pred_[1,1])
                 iou = box2d_iou(pred, gt)
                 diff = ((((gt[2]+gt[0]-pred[2]-pred[0])**2) + (gt[3]+gt[1]-pred[3]-pred[1])**2)**0.5)/2
-                # print("Prediction: ", pred_)
                 if iou > max_iou[j]:
-                    # print("IoU: ", iou, " Max IoU: ", max_iou[j])
                     max_iou[j] = iou
                     sorted_pred[j,:,:] = pred_
                     center_diff[j] = diff
                 elif iou == 0 and max_iou[j] == 0 and (center_diff[j] > diff):
                     # Centers of the predicted box are closer than before
-                    # print("Center diff: ", diff, " Diff so far: ", center_diff[j])
                     center_diff[j] = diff
                     sorted_pred[j,:,:] = pred_
     return sorted_pred
@@ -333,15 +275,12 @@ def match_output_gt_boxes(output_boxes, ground_truth, is_visible):
                 gt = (ground_truth[j,0,0], ground_truth[j,0,1], ground_truth[j,1,0], ground_truth[j,1,1])
                 iou = box2d_iou(pred, gt)
                 diff = ((((gt[2]+gt[0]-pred[2]-pred[0])**2) + (gt[3]+gt[1]-pred[3]-pred[1])**2)**0.5)/2
-                # print("Prediction: ", pred_)
                 if iou > max_iou[kk]:
-                    # print("IoU: ", iou, " Max IoU: ", max_iou[j])
                     max_iou[kk] = iou
                     sorted_pred[kk,:,:] = ground_truth[j,:,:]
                     center_diff[kk] = diff
                 elif iou == 0 and max_iou[kk] == 0 and (center_diff[kk] > diff):
                     # Centers of the predicted box are closer than before
-                    # print("Center diff: ", diff, " Diff so far: ", center_diff[j])
                     center_diff[kk] = diff
                     sorted_pred[kk,:,:] = ground_truth[j,:,:]
     return sorted_pred
@@ -363,7 +302,6 @@ def plot_box_pc(pc, output_boxes, gt_boxes, is_vis):
     ax.set_aspect('equal')
 
     for jj, cc in enumerate(output_boxes):
-        # if is_vis[jj]:
         r0 = [cc[0, 0], cc[1, 0]]
         r1 = [cc[0, 1], cc[1, 1]]
         r2 = [cc[0, 2], cc[1, 2]]
@@ -375,7 +313,6 @@ def plot_box_pc(pc, output_boxes, gt_boxes, is_vis):
                 ax.plot3D(*zip(s, e), color=(0.5, 0.1,0.1))
 
     for jj, cc in enumerate(gt_boxes):
-        # if is_vis[jj]:
         r0 = [cc[0, 0], cc[1, 0]]
         r1 = [cc[0, 1], cc[1, 1]]
         r2 = [cc[0, 2], cc[1, 2]]
@@ -414,7 +351,7 @@ def format_results(results):
         match_outputs_gt["gt"][env,:,:,:] = torch.from_numpy(results[env]["matched_gt"])
     return model_outputs_all, bboxes_ground_truth_aligned, loss_mask, match_outputs_gt
 
-def combine_old_files(filenames, num_files, num_envs_per_file):
+def combine_old_files(filenames, num_files):
     model_outputs_all = {"box_features": torch.tensor([]), "box_axis_aligned": torch.tensor([])}
     match_outputs_gt = {"output": torch.tensor([]), "gt": torch.tensor([])}
     bboxes_ground_truth_aligned = torch.tensor([])
@@ -454,10 +391,7 @@ if __name__ == '__main__':
 
     # Sample random task
     save_tasks = []
-    # ipy.embed()
     for task in task_dataset:
-
-        # task = random.choice(task_dataset)
 
         # Initialize task
         task.goal_radius = 0.5
@@ -485,11 +419,6 @@ if __name__ == '__main__':
         task.observation.lidar.vertical_fov = 30  # half in one direction, in degree
         task.observation.lidar.max_range = 5 # in meter Anushri changed from 5 to 8
 
-        # Run environment
-        # run_env(task)
-        # save_tasks += [task]
-        # print(len(save_tasks))
-
     ##################################################################
     # Number of environments
     num_envs = 100
@@ -508,16 +437,13 @@ if __name__ == '__main__':
     ##################################################################
 
     for task in task_dataset:
-        # save_tasks += [task]
         env += 1 
         if env%batch_size == 0:
-            if env>400: #410: # In case code stops running, change starting environment to last batch saved
+            if env>0: # In case code stops running, change starting environment to last batch saved
                 batch = math.floor(env/batch_size)
                 print("Saving batch", str(batch))
                 t_start = time.time()
                 pool = Pool(num_parallel) # Number of parallel processes
-                # seeds = range(batch) # Seeds to use for the different processes
-                # print(task.piece_id_all)
                 results = pool.map_async(run_env, task_dataset[env-batch_size:env]) # Compute results
                 pool.close()
                 pool.join()
@@ -528,33 +454,22 @@ if __name__ == '__main__':
                 print("Time to generate results: ", t_end - t_start)
                 ###########################################################################
                 model_outputs_all, bboxes_ground_truth_aligned, loss_mask, match_outputs_gt = format_results(results)
-                torch.save(model_outputs_all, "data/dataset_intermediate/features15_cal"+str(batch) + ".pt")
-                torch.save(bboxes_ground_truth_aligned, "data/dataset_intermediate/bbox_labels15_cal"+str(batch) + ".pt")
-                torch.save(loss_mask, "data/dataset_intermediate/loss_mask15_cal"+str(batch) + ".pt")
-                torch.save(match_outputs_gt, "data/dataset_intermediate/finetune15_cal"+str(batch) + ".pt")
-
-            #     ii = 0
-            #     for result in results.get():
-            #         # Save data
-            #         # file_batch = save_file[:-4] + str(batch) + ".npz"
-            #         file_batch = save_file[:-4] + str(env+ii) + ".npz"
-            #         print(file_batch)
-            #         np.savez_compressed(file_batch, data=result)
-            #         ii=+1
-            #         print("Time to generate results: ", t_end - t_start)
-            # save_tasks = []
+                torch.save(model_outputs_all, args.save_dataset + "data/dataset_intermediate/features"+str(batch) + ".pt")
+                torch.save(bboxes_ground_truth_aligned, args.save_dataset + "data/dataset_intermediate/bbox_labels"+str(batch) + ".pt")
+                torch.save(loss_mask, args.save_dataset + "data/dataset_intermediate/loss_mask"+str(batch) + ".pt")
+                torch.save(match_outputs_gt, args.save_dataset + "data/dataset_intermediate/finetune"+str(batch) + ".pt")
     #################################################################
 
     # model_outputs_all, bboxes_ground_truth_aligned, loss_mask, match_outputs_gt = format_results(save_res)
-    filenames = ["data/dataset_intermediate/features15_cal", "data/dataset_intermediate/bbox_labels15_cal", "data/dataset_intermediate/loss_mask15_cal", "data/dataset_intermediate/finetune15_cal"]
-    model_outputs_all, bboxes_ground_truth_aligned, loss_mask, match_outputs_gt = combine_old_files(filenames, 50, 10)
+    filenames = [args.save_dataset + "data/dataset_intermediate/features", args.save_dataset + "data/dataset_intermediate/bbox_labels", args.save_dataset + "data/dataset_intermediate/loss_mask", args.save_dataset + "data/dataset_intermediate/finetune"]
+    model_outputs_all, bboxes_ground_truth_aligned, loss_mask, match_outputs_gt = combine_old_files(filenames, int(len(task_dataset)/num_parallel))
     ###########################################################################
     # # Save processed feature data
-    torch.save(model_outputs_all, "data/features15_cal.pt")
+    torch.save(model_outputs_all, args.save_dataset + "data/features.pt")
     # # Save ground truth bounding boxes
-    torch.save(bboxes_ground_truth_aligned, "data/bbox_labels15_cal.pt")
+    torch.save(bboxes_ground_truth_aligned, args.save_dataset + "data/bbox_labels.pt")
     # # Save loss mask
-    torch.save(loss_mask, "data/loss_mask15_cal.pt")
+    torch.save(loss_mask, args.save_dataset + "data/loss_mask.pt")
     # # Save all box outputs for finetuning
-    torch.save(match_outputs_gt, "data/finetune15_cal.pt")
+    torch.save(match_outputs_gt, args.save_dataset + "data/finetune.pt")
     ###########################################################################

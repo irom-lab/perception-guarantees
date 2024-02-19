@@ -278,13 +278,13 @@ def process_mesh(category_all, task_id, args):
             # print('init/goal too close')
             continue
 
-        # Check if there is no obstacle between init and goal
-        points = get_grid_cells_btw(init_state_bin, goal_state_bin)
-        points_voxel = [room_voxels_2d[point[0], point[1]] for point in points]
-        if sum(points_voxel) < 5:
-            print('Not enough obstacle')
-            continue
-        break
+        # # Check if there is no obstacle between init and goal
+        # points = get_grid_cells_btw(init_state_bin, goal_state_bin)
+        # points_voxel = [room_voxels_2d[point[0], point[1]] for point in points]
+        # if sum(points_voxel) < 5:
+        #     print('Not enough obstacle')
+        #     continue
+        # break
     if init_goal_attempt == max_init_goal_attempt:
         # print('no init/goal found')
         return 0
@@ -369,10 +369,8 @@ def process_mesh(category_all, task_id, args):
     task.goal_loc = [float(v) for v in goal_loc]
     task.piece_id_all = piece_id_all
     task.piece_pos_all = piece_pos_all
-    # print(piece_saved_bounds, len(piece_saved_bounds))
     piece_bounds_list = [(np.resize(piece_saved_bounds[i],6)) for i in range(len(piece_saved_bounds))]
     piece_bounds_list = [[float(piece_bounds_list[i][j]) for j in range(len(piece_bounds_list[i]))] for i in range(len(piece_bounds_list))]
-    # print(type(piece_pos_all[0]), type(piece_bounds_list[0]))
     task.piece_bounds_all = piece_bounds_list
 
     # Pickle task
@@ -410,7 +408,7 @@ if __name__ == "__main__":
         help='number of rooms to generate'
     )
     parser.add_argument(
-        '--num_furniture_per_room', default=1, nargs='?',
+        '--num_furniture_per_room', default=5, nargs='?',
         help='number of furniture per room'
     )
     parser.add_argument(
