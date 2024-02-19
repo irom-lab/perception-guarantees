@@ -22,7 +22,7 @@ cd third_party/pointnet2 && python setup.py install
 Install plyfile:
 ```
 pip install plyfile
-``
+```
 
 ## Running the code with Pybullet sim (in nav_sim)
 
