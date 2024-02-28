@@ -5,7 +5,6 @@ This module contains a vectorized environment that runs multiple environments in
 Please contact the author(s) of this library if you have any questions.
 Authors: Allen Z. Ren (allen.ren@princeton.edu)
 """
-
 import numpy as np
 import multiprocessing as mp
 import cloudpickle
@@ -61,7 +60,7 @@ def _worker(remote, parent_remote, env_fn_wrapper, cpu_ind=-1):
                 remote.send(setattr(env, data[0], data[1]))
             else:
                 raise NotImplementedError(
-                    f"`{cmd}` is not implemented in the worker"
+                    "`{}` is not implemented in the worker".format(cmd)
                 )
         except EOFError:
             break

@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
 import pickle
-from multiprocessing import Pool
 
 from shapely.geometry import Point, MultiPolygon, Polygon, LineString, MultiPoint
 from shapely.ops import unary_union

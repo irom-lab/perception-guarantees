@@ -43,14 +43,14 @@ class VanillaEnv():
         self.front_wall_rgba = [199 / 255, 182 / 255, 191 / 255, 1.0]
 
         # Robot dimensions TODO: get Go1 dimensions
-        self.robot_half_dim = [0.40, 0.25, 0.30]
+        self.robot_half_dim = [0.323, 0.14, 0.2]
         self.robot_com_height = self.robot_half_dim[2]
         self.lidar_height = 0.15
         self.camera_thickness = 0.04
 
         # Dynamics model
-        self.xdot_range = [0.5, 1.0]
-        self.dt = 0.1  # 10 Hz for now
+        self.xdot_range = [0.5, 1.0] 
+        self.dt = 2  # 10 Hz for now #Anushri changed from 0.1 to 2
 
     def reset(self, task=None):
         """
@@ -164,8 +164,8 @@ class VanillaEnv():
             )
 
             # Get Image
-            far = 1000.0
-            near = 0.01
+            far = 5 #1000.0
+            near = 1 #0.01
             projection_matrix = self._p.computeProjectionMatrixFOV(
                 fov=rgb_cfg.fov, aspect=rgb_cfg.aspect, nearVal=near,
                 farVal=far
@@ -179,18 +179,56 @@ class VanillaEnv():
             depth = far * near / (far - (far-near) * depth)
 
             # Convert RGB to CHW and uint8
-            rgb = rgba2rgb(rgb_img).transpose(2, 0, 1)
-            return rgb
+            # rgb = rgba2rgb(rgb_img).transpose(2, 0, 1)
+            pc = self._get_point_cloud(depth, rgb_cfg.img_w, rgb_cfg.img_h, view_matrix, projection_matrix)
+            # print("Depth map, ", pc.shape, pc)
+            # print("Height: ", rgb_cfg.img_h, " Width: ", rgb_cfg.img_w)
+            return pc.T #rgb
 
         elif self.observation_type == 'lidar':
             return self._get_lidar()
+
+    def _get_point_cloud(self, depth, width, height, view_matrix, proj_matrix):
+        # based on https://stackoverflow.com/questions/59128880/getting-world-coordinates-from-opengl-depth-buffer
+
+        # get a depth image
+        # "infinite" depths will have a value close to 1
+        image_arr = pb.getCameraImage(width=width, height=height, viewMatrix=view_matrix, projectionMatrix=proj_matrix, 
+                                      flags=self._p.ER_NO_SEGMENTATION_MASK, shadow=1,
+                                      lightDirection=[1, 1, 1])
+        depth = np.array(image_arr[3])
+
+        # create a 4x4 transform matrix that goes from pixel coordinates (and depth values) to world coordinates
+        proj_matrix = np.asarray(proj_matrix).reshape([4, 4], order="F")
+        view_matrix = np.asarray(view_matrix).reshape([4, 4], order="F")
+        tran_pix_world = np.linalg.inv(np.matmul(proj_matrix, view_matrix))
+
+        # create a grid with pixel coordinates and depth values
+        # y, x = np.mgrid[-1:1:2 / height, -1:1:2 / width]
+        y, x = np.mgrid[-1:1:2 / height, -1:1:2 / width]
+        y *= -1.
+        x, y, z = x.reshape(-1), y.reshape(-1), depth.reshape(-1)
+        h = np.ones_like(z)
+
+        pixels = np.stack([x, y, z, h], axis=1)
+        # filter out "infinite" depths
+        pixels = pixels[z < 0.99999]
+        pixels[:, 2] = 2 * pixels[:, 2] - 1
+
+        # turn pixels to world coordinates
+        points = np.matmul(tran_pix_world, pixels.T).T
+        points /= points[:, 3: 4]
+        points = points[:, :3]
+
+        return points
 
     def _get_lidar(self):
         """
         Simulate LiDAR measurement at robot's current state.
 
         Returns:
-            np.ndarray: LiDAR measurement, of the shape (3, N)
+            np.ndarray: LiDAR measurement, of the shape (3, N) 
+            Comment from Anushri: Changed this measurement from np to float so that we can easily use it in omegaConf
         """
         lidar_cfg = self.lidar_cfg
 
@@ -490,19 +528,36 @@ class VanillaEnv():
         """
         x, y, theta = state
         x_dot, y_dot, theta_dot = action
-        x_new = (
-            x + x_dot * np.cos(theta) * self.dt
-            - y_dot * np.sin(theta) * self.dt
-        )
-        y_new = (
-            y + x_dot * np.sin(theta) * self.dt
-            + y_dot * np.cos(theta) * self.dt
-        )
+
         theta_new = theta + theta_dot * self.dt
         if theta_new > 2 * np.pi:
             theta_new -= 2 * np.pi
         elif theta_new < 0:
             theta_new += 2 * np.pi
+        # x_new = (
+        #     x + x_dot * np.cos(theta_new) * self.dt
+        #     - y_dot * np.sin(theta_new) * self.dt
+        # )
+        # y_new = (
+        #     y + x_dot * np.sin(theta_new) * self.dt
+        #     + y_dot * np.cos(theta_new) * self.dt
+        # )
+        # # x_new = (
+        # #     x + x_dot * np.cos(theta) * self.dt
+        # #     - y_dot * np.sin(theta) * self.dt
+        # # )
+        # # y_new = (
+        # #     y + x_dot * np.sin(theta) * self.dt
+        # #     + y_dot * np.cos(theta) * self.dt
+        # # )
+        # # theta_new = theta + theta_dot * self.dt
+        # # if theta_new > 2 * np.pi:
+        # #     theta_new -= 2 * np.pi
+        # # elif theta_new < 0:
+        # #     theta_new += 2 * np.pi
+        x_new = x_dot
+        y_new = y_dot
+        theta_new = 0
         state = np.array([x_new, y_new, theta_new])
 
         # Update visual

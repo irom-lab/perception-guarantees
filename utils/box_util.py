@@ -162,10 +162,10 @@ def get_iou(bb1, bb2):
     float
         in [0, 1]
     """
-    assert bb1["x1"] < bb1["x2"]
-    assert bb1["y1"] < bb1["y2"]
-    assert bb2["x1"] < bb2["x2"]
-    assert bb2["y1"] < bb2["y2"]
+    assert bb1["x1"] <= bb1["x2"]
+    assert bb1["y1"] <= bb1["y2"]
+    assert bb2["x1"] <= bb2["x2"]
+    assert bb2["y1"] <= bb2["y2"]
 
     # determine the coordinates of the intersection rectangle
     x_left = max(bb1["x1"], bb2["x1"])
@@ -173,7 +173,7 @@ def get_iou(bb1, bb2):
     x_right = min(bb1["x2"], bb2["x2"])
     y_bottom = min(bb1["y2"], bb2["y2"])
 
-    if x_right < x_left or y_bottom < y_top:
+    if x_right <= x_left or y_bottom <= y_top:
         return 0.0
 
     # The intersection of two axis-aligned bounding boxes is always an
@@ -751,7 +751,6 @@ def inside_aligned_box(point, box):
     is_inside = (point >= box[0,:]).all() and (point <= box[1,:]).all()
 
     return is_inside
-
 
 
 

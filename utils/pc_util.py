@@ -3,6 +3,7 @@ import sys
 import torch
 import IPython as ipy
 import time
+import math
 
 # Point cloud IO
 import numpy as np
@@ -402,6 +403,28 @@ def pc_cam_to_gibson(points_in_cam_frame, cam_pos):
 
     return points_new
 
+def pc_cam_to_3detr(points_in_cam_frame):
+    '''
+    Convert point cloud from camera coordinate system to 3DETR world coordinate system.
+    ASSUMPTION: Camera is facing in the +X world direction.  
+    Camera: +X (forward), +Y (left),    +Z (upward)
+    Gibson world:    +X (right),   +Y (forward), +Z (up) 
+    Args:
+        points_in_cam_frame: Nx3
+        cam_pos: (3,)
+    '''
+    
+    # Convert directions and add cam_pos
+    
+    # points_new = [(points_in_cam_frame[i,1], -points_in_cam_frame[i,0], points_in_cam_frame[i,2]) for i in range(points_in_cam_frame.shape[0])]
+
+    points_new = np.zeros_like(points_in_cam_frame)
+    points_new[:,0] = -points_in_cam_frame[:,1]
+    points_new[:,1] = points_in_cam_frame[:,0]
+    points_new[:,2] = points_in_cam_frame[:,2]
+
+    return points_new
+
 
 def write_ply(points, filename, text=True):
     """ input: Nx3, write points to filename as PLY format. """
@@ -419,7 +442,45 @@ def write_ply_rgb(points, colors, out_filename, num_classes=None):
         fout.write('v %f %f %f %d %d %d\n' % (points[i,0], points[i,1], points[i,2],c[0],c[1],c[2]))
     fout.close()
 
+def is_inside_camera_fov(state, obstacles, fov):
+    """" find whether the obstacle is within FOV of camera
+         input: state (x,y,orientation)
+                obstacles (list of bounding boxes of all obstacles)
+                fov (horizontal fov in degrees, it is the same as the vertical fov if aspect = 1)
+    """
+    fov = math.radians(fov)
+    # Find the range of the camera FOV in min and max angles
+    rng = np.mod([2*np.pi - (fov/2) + state[2], 2*np.pi + (fov/2) + state[2]],2*np.pi)
+    # Find the angle between the camera and the obstacle center 
+    angles = np.mod([2*np.pi + np.arctan2(((obs[1]+obs[4])/2)-state[1], ((obs[0]+obs[3])/2)-state[0])for obs in obstacles], 2*np.pi)
+    # Check if the obstacle is within the FOV of the camera
+    is_vis = [1 if ((ang >= rng[0] and ang <= rng[1]) or 
+                    (rng[0] > rng[1] and ang > np.pi and ang-2*np.pi >= rng[0]-2*np.pi and ang-2*np.pi <= rng[1]) or 
+                    (rng[0] > rng[1] and ang >= rng[0]-2*np.pi and ang <= rng[1]))  else 0 for ang in angles]
+    # print(is_vis, rng, angles)
+    # print("Obstacle", obstacles)
+    # print("Cam: ", state)
+    return is_vis
 
+# def is_inside_camera_fov(state, pc, fov):
+#     """" find whether the obstacle is within FOV of camera
+#          input: state (x,y,orientation)
+#                 obstacles (list of bounding boxes of all obstacles)
+#                 fov (horizontal fov in degrees, it is the same as the vertical fov if aspect = 1)
+#     """
+#     fov = math.radians(fov)
+#     # Find the range of the camera FOV in min and max angles
+#     rng = np.mod([2*np.pi - (fov/2) + state[2], 2*np.pi + (fov/2) + state[2]],2*np.pi)
+#     # Find the angle between the camera and the obstacle center 
+#     angles = np.mod([2*np.pi + np.arctan2(((obs[1]+obs[4])/2)-state[1], ((obs[0]+obs[3])/2)-state[0])for obs in obstacles], 2*np.pi)
+#     # Check if the obstacle is within the FOV of the camera
+#     is_vis = [1 if ((ang >= rng[0] and ang <= rng[1]) or 
+#                     (rng[0] > rng[1] and ang > np.pi and ang-2*np.pi >= rng[0]-2*np.pi and ang-2*np.pi <= rng[1]) or 
+#                     (rng[0] > rng[1] and ang >= rng[0]-2*np.pi and ang <= rng[1]))  else 0 for ang in angles]
+#     # print(is_vis, rng, angles)
+#     # print("Obstacle", obstacles)
+#     # print("Cam: ", state)
+#     return is_vis
 
 
 

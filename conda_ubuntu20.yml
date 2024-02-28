@@ -1,4 +1,4 @@
-name: pac-perception
+name: pac_perception
 channels:
   - defaults
 dependencies:
@@ -44,9 +44,9 @@ dependencies:
       - pyyaml==6.0
       - six==1.16.0
       - scipy==1.10.1
-      - torch==1.9.0+cu102
+      - torch==1.9.0
       - torchaudio==0.9.0
-      - torchvision==0.10.0+cu102
+      - torchvision==0.10.0
       - tqdm==4.65.0
       - typing-extensions==4.5.0
       - zipp==3.15.0

@@ -82,13 +82,20 @@ def check_free(grid, coord):
 
 
 def get_neighbor(grid, coord, radius):
-    # radius excludes coord itself
-    min_x = max(0, coord[0] - radius)
-    max_x = min(grid.shape[0], coord[0] + radius + 1)
-    min_y = max(0, coord[1] - radius)
-    max_y = min(grid.shape[1], coord[1] + radius + 1)
-    return grid[min_x:max_x, min_y:max_y]
-
+    if len(radius) < 2:
+        # radius excludes coord itself
+        min_x = max(0, coord[0] - radius)
+        max_x = min(grid.shape[0], coord[0] + radius + 1)
+        min_y = max(0, coord[1] - radius)
+        max_y = min(grid.shape[1], coord[1] + radius + 1)
+        return grid[min_x:max_x, min_y:max_y]
+    elif len(radius) == 2:
+        # radius excludes coord itself, exclude walls as well
+        min_x = max(2, coord[0] - radius[0])
+        max_x = min(grid.shape[0]-2, coord[0] + radius[0] + 1)
+        min_y = max(2, coord[1] - radius[1])
+        max_y = min(grid.shape[1]-2, coord[1] + radius[1] + 1)
+        return grid[min_x:max_x, min_y:max_y]
 
 def slice_mesh(mesh):
     mesh_below = trimesh.intersections.slice_mesh_plane(
