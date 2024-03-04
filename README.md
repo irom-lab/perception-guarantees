@@ -26,36 +26,36 @@ pip install plyfile
 
 ## Generating the calibration dataset with Pybullet sim (in nav_sim)
 
-After following the installation instructions in the nav_sim README, run script to generate the room configurations (change folder name as required):
+1. After following the installation instructions in the nav_sim README, run script to generate the room configurations (change folder name as required):
 ```console
 python nav_sim/asset/get_room_from_3dfront.py --save_task_folder=<path to save dataset>/rooms --mesh_folder=<path to save dataset>/3D-FUTURE-model-tiny
 ```
 
-Generate task dataset by aggregating the room configurations:
+2. Generate task dataset by aggregating the room configurations:
 ```console
 python nav_sim/asset/get_task_dataset.py --save_path=<path to save dataset>/task.pkl --task_folder=<path to save dataset>/rooms
 ```
 
-Collect a calibration dataset with random tasks generated:
+3. Collect a calibration dataset with random tasks generated:
 ```console
 python nav_sim/test/test_task_sim.py --task_dataset=<path to save dataset>/task.pkl --save_dataset=<path to save dataset>/
 ```
 Use above task dataset to test the environment with random locations in each room. This code will 
-1. Generate the pointclouds through the pybullet sim (we're using the ZED2i camera parameters)
-2. Compute the features using 3DETR for each pointcloud in each location of every environment
-3. This will generate the following files: `data/features.pt`, `data/bbox_labels.pt`, `data/loss_mask.pt`, and `data/finetune.pt`. This is the calibration dataset.
+3.1 Generate the pointclouds through the pybullet sim (we're using the ZED2i camera parameters)
+3.2 Compute the features using 3DETR for each pointcloud in each location of every environment
+3.3 This will generate the following files: `data/features.pt`, `data/bbox_labels.pt`, `data/loss_mask.pt`, and `data/finetune.pt`. This is the calibration dataset.
 
-Sim datset generation:
-Repeat the first two steps and save a new task_sim.pkl file with new rooms:
+4. Sim datset generation:
+Repeat the first two steps (1-2) and save a new task_sim.pkl file with new rooms:
 ```console
 python nav_sim/asset/get_room_from_3dfront.py --save_task_folder=<path to save dataset>/rooms_sim --mesh_folder=<path to save dataset>/3D-FUTURE-model-tiny --num_room=100 --seed=33 --sim=True
 
-Generate task dataset by aggregating the room configurations:
+5. Generate task dataset by aggregating the room configurations:
 ```console
 python nav_sim/asset/get_task_dataset.py --save_path=<path to save dataset>/task_sim.pkl --task_folder=<path to save dataset>/rooms_sim
 ```
 
-## Obtain the CP inflation bound uding the calibration dataset
+## Obtain the CP inflation bound using the calibration dataset
 Run the code to get the CP inflation bound:
 ```commandline
 python cp_bound.py
@@ -64,9 +64,13 @@ If you want to finetune the outputs from 3DETR (using a split CP) and then use t
 ```commandline
 python cp_bound_with_finetuning.py
 ```
-
-## Obtain the CP inflation bound uding the calibration dataset
-
+## Run the planner code
+1. See instructions in planning/README.md to run example code and get samples.
+2. If instead, you want to test the planner on many sim environments (generated the using steps 1-2 of the code used to generate the calibration dataset), run
+```commandline
+python planner_test_task.py
+```
+In this code the task folder is called rooms_multiple, but you can change it to wherever you saved your test sim environment tasks.
 ## Notes
 
 - Be careful with reference frames; here are the main ones:
