@@ -7,13 +7,17 @@ Install [`iGibson`](https://stanfordvl.github.io/iGibson/installation.html). Als
 
 Install [`Meshlab`](https://www.meshlab.net/) for visualizing point clouds and debugging.
 
-Install CUDA 10.2.
+Install CUDA 10.2 (we have also have it working with CUDA 11.7).
 
 Install PyTorch 1.9.0:
 ```
 pip install torch==1.9.0+cu102 torchvision==0.10.0+cu102 torchaudio==0.9.0 -f https://download.pytorch.org/whl/torch_stable.html
 ```
 
+Alternatively you can also run (installs cuda 11.7)
+```
+pip install -r requirements.txt
+```
 Install pointnet2:
 ```
 cd third_party/pointnet2 && python setup.py install
