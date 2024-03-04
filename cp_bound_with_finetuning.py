@@ -33,15 +33,15 @@ def main(raw_args=None):
 	###################################################################
 	# Initialize dataset and dataloader
 	dataset = PointCloudDataset("data/features15_cal_variable_chairs.pt", "data/bbox_labels15_cal_variable_chairs.pt", "data/loss_mask15_cal_variable_chairs.pt", "data/finetune15_cal_variable_chairs.pt")
-	test_dataset = PointCloudDataset("data/features15_test_variable_chairs.pt", "data/bbox_labels15_test_variable_chairs.pt", "data/loss_mask15_test_variable_chairs.pt", "data/finetune15_test_variable_chairs.pt")
 	batch_size = 100 #100
 	N=len(dataset)
 	N_obj = dataset.bbox_labels.shape[2]
+	split_cp_size = 100
 
 	params = {'batch_size': batch_size,
 				'shuffle': False}
-	dataloader_test = DataLoader(test_dataset, batch_size=1)
-	dataloader_cp = DataLoader(dataset, batch_size=len(dataset))
+	dataloader_test = DataLoader(dataset, batch_size=1)
+	dataloader_cp = DataLoader(dataset, batch_size=(len(dataset)-split_cp_size))
 	###################################################################
 
 	###################################################################
@@ -81,6 +81,8 @@ def main(raw_args=None):
 		current_loss_true = 0.0
 		num_batches = 0
 		for i, data in enumerate(dataloader_test, 0):
+			if i < len(dataset) - split_cp_size:
+				continue
 
 			# Get inputs, targets, loss mask
 			inputs, targets, loss_mask, finetune = data
@@ -118,12 +120,14 @@ def main(raw_args=None):
 				  "; loss true: ", '{:02.6f}'.format(current_loss_true / num_batches), end='\r')
 		###################################################################
 
-	torch.save(model_cp.state_dict(), "trained_models/perception_model_w205")
+	torch.save(model_cp.state_dict(), "trained_models/perception_model")
 	#################################################################
 			
 	# With finetuning
 	print("Calculating CP with finetuned model...")
 	for i, data in enumerate(dataloader_cp, 0):
+		if i > 0:
+			continue
 		inputs, targets, loss_mask, finetune = data
 		# print(len(dataset), len(inputs))
 		inputs = inputs.to(device)

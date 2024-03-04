@@ -301,10 +301,11 @@ def process_mesh(category_all, task_id, args):
         room_voxels.origin[1] + goal_state_bin[1] * grid_pitch,
     ]
 
-    # init_state = state_bin_to_lin([3,31], [N, M]) # [0.2, -1]
-    # goal_state = state_bin_to_lin([71,21], [N, M]) # [7,-2]
-    # init_state_bin = state_lin_to_bin(init_state, [N, M])
-    # goal_state_bin = state_lin_to_bin(goal_state, [N, M])
+    if args.sim:
+        init_state = state_bin_to_lin([3,31], [N, M]) # [0.2, -1]
+        goal_state = state_bin_to_lin([71,21], [N, M]) # [7,-2]
+        init_state_bin = state_lin_to_bin(init_state, [N, M])
+        goal_state_bin = state_lin_to_bin(goal_state, [N, M])
     # ############################################################
 
     init_state = [
@@ -404,25 +405,26 @@ if __name__ == "__main__":
     #     help='use simplified mesh'
     # )
     parser.add_argument(
-        '--num_room', default=400, nargs='?',
+        '--num_room', default=500, nargs='?', type=int,
         help='number of rooms to generate'
     )
     parser.add_argument(
-        '--num_furniture_per_room', default=5, nargs='?',
+        '--num_furniture_per_room', default=5, nargs='?', type=int,
         help='number of furniture per room'
     )
     parser.add_argument(
         '--room_dim', default=8, nargs='?', help='room dimension'
     )
     parser.add_argument(
-        '--min_obstacle_spacing', default=2, nargs='?',
+        '--min_obstacle_spacing', default=2, nargs='?', type=float,
         help='min obstacle spacing'
     )
     parser.add_argument(
-        '--min_init_goal_dist', default=7, nargs='?',
+        '--min_init_goal_dist', default=7, nargs='?', type=float,
         help='min distance between init position and goal'
     )
-    parser.add_argument('--seed', default=22, nargs='?', help='random seed')
+    parser.add_argument('--seed', default=22, nargs='?', type=int, help='random seed')
+    parser.add_argument('--sim', default=False, nargs='?', type=bool, help='Fixes initial condition if collecting dataset for running sims')
     args = parser.parse_args()
 
     # cfg

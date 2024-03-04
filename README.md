@@ -24,7 +24,7 @@ Install plyfile:
 pip install plyfile
 ```
 
-## Running the code with Pybullet sim (in nav_sim)
+## Generating the calibration dataset with Pybullet sim (in nav_sim)
 
 After following the installation instructions in the nav_sim README, run script to generate the room configurations (change folder name as required):
 ```console
@@ -45,14 +45,27 @@ Use above task dataset to test the environment with random locations in each roo
 2. Compute the features using 3DETR for each pointcloud in each location of every environment
 3. This will generate the following files: `data/features.pt`, `data/bbox_labels.pt`, `data/loss_mask.pt`, and `data/finetune.pt`. This is the calibration dataset.
 
+Sim datset generation:
+Repeat the first two steps and save a new task_sim.pkl file with new rooms:
+```console
+python nav_sim/asset/get_room_from_3dfront.py --save_task_folder=<path to save dataset>/rooms_sim --mesh_folder=<path to save dataset>/3D-FUTURE-model-tiny --num_room=100 --seed=33 --sim=True
+
+Generate task dataset by aggregating the room configurations:
+```console
+python nav_sim/asset/get_task_dataset.py --save_path=<path to save dataset>/task_sim.pkl --task_folder=<path to save dataset>/rooms_sim
+```
+
+## Obtain the CP inflation bound uding the calibration dataset
 Run the code to get the CP inflation bound:
 ```commandline
 python cp_bound.py
 ```
-If you want to finetune the outputs from 3DETR (using a "test dataset") and then use this to get a CP bound (using "dataset"):
+If you want to finetune the outputs from 3DETR (using a split CP) and then use this to get a CP bound (using "dataset"):
 ```commandline
 python cp_bound_with_finetuning.py
 ```
+
+## Obtain the CP inflation bound uding the calibration dataset
 
 ## Notes
 
