@@ -32,9 +32,9 @@ except RuntimeError:
 
 from models.model_perception import MLPModelDet
 
-f = open('planning/pre_compute/reachable_10Hz.pkl', 'rb')
+f = open('planning/pre_compute/reachable.pkl', 'rb')
 reachable = pickle.load(f)
-f = open('planning/pre_compute/Pset_10Hz.pkl', 'rb')
+f = open('planning/pre_compute/Pset.pkl', 'rb')
 Pset = pickle.load(f)
 dt = 0.1
 print("dt=", dt)

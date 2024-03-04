@@ -65,12 +65,13 @@ If you want to finetune the outputs from 3DETR (using a split CP) and then use t
 python cp_bound_with_finetuning.py
 ```
 ## Run the planner code
-1. See instructions in planning/README.md to run example code and get samples.
+1. See instructions in planning/README.md to run example code and get samples and run a simple version of the planner code.
 2. If instead, you want to test the planner on many sim environments (generated the using steps 1-2 of the code used to generate the calibration dataset), run
 ```commandline
 python planner_test_task.py
 ```
 In this code the task folder is called rooms_multiple, but you can change it to wherever you saved your test sim environment tasks.
+
 ## Notes
 
 - Be careful with reference frames; here are the main ones:
