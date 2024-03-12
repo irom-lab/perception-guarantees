@@ -12,7 +12,10 @@ import pybullet as pb
 from pybullet_utils import bullet_client as bc
 
 from nav_sim.util.misc import rgba2rgb
+from robot_descriptions.loaders.pybullet import load_robot_description
 
+k1=3.968; k2=2.517; k3=0.1353; k4=-0.5197; k5 = 4.651; k6 = 2.335
+# print("Controller gains, k1", k1, " k2 ", k2, " k3 ", k3, " k4 ", k4, " k5 ", k5, " k6 ", k6)
 
 class VanillaEnv():
 
@@ -36,7 +39,7 @@ class VanillaEnv():
         self.room_dim = 8
         self.wall_thickness = 0.1
         self.wall_height = 4
-        self.ground_rgba = [0.8, 0.8, 0.8, 1.0]
+        self.ground_rgba = [175/255, 175/255, 175/255, 1.0]
         self.back_wall_rgba = [199 / 255, 182 / 255, 191 / 255, 1.0]
         self.left_wall_rgba = [199 / 255, 182 / 255, 191 / 255, 1.0]
         self.right_wall_rgba = [199 / 255, 182 / 255, 191 / 255, 1.0]
@@ -44,7 +47,7 @@ class VanillaEnv():
 
         # Robot dimensions TODO: get Go1 dimensions
         self.robot_half_dim = [0.323, 0.14, 0.2]
-        self.robot_com_height = self.robot_half_dim[2]
+        self.robot_com_height = self.robot_half_dim[2]+0.3
         self.lidar_height = 0.15
         self.camera_thickness = 0.04
 
@@ -333,17 +336,17 @@ class VanillaEnv():
                 self.wall_height / 2
             ]
         )
-        wall_back_visual_id = p.createVisualShape(
-            p.GEOM_BOX, rgbaColor=self.back_wall_rgba, halfExtents=[
-                self.wall_thickness / 2, self.room_dim / 2,
-                self.wall_height / 2
-            ]
-        )
-        self.wall_back_id = p.createMultiBody(
-            baseMass=0, baseCollisionShapeIndex=wall_collision_id,
-            baseVisualShapeIndex=wall_back_visual_id,
-            basePosition=[-self.wall_thickness / 2, 0, self.wall_height / 2]
-        )
+        # wall_back_visual_id = p.createVisualShape(
+        #     p.GEOM_BOX, rgbaColor=self.back_wall_rgba, halfExtents=[
+        #         self.wall_thickness / 2, self.room_dim / 2,
+        #         self.wall_height / 2
+        #     ]
+        # )
+        # self.wall_back_id = p.createMultiBody(
+        #     baseMass=0, baseCollisionShapeIndex=wall_collision_id,
+        #     baseVisualShapeIndex=wall_back_visual_id,
+        #     basePosition=[-self.wall_thickness / 2, 0, self.wall_height / 2]
+        # )
         wall_left_visual_id = p.createVisualShape(
             p.GEOM_BOX, rgbaColor=self.left_wall_rgba, halfExtents=[
                 self.wall_thickness / 2, self.room_dim / 2,
@@ -389,35 +392,35 @@ class VanillaEnv():
                 self.wall_height / 2
             ]
         )
-        self.wall_top_id = p.createMultiBody(
-            # for blocking view - same as ground
-            baseMass=0,
-            baseCollisionShapeIndex=ground_collision_id,
-            baseVisualShapeIndex=ground_visual_id,
-            basePosition=[
-                self.room_dim / 2, 0,
-                self.wall_height + self.wall_thickness / 2
-            ]
-        )
+        # self.wall_top_id = p.createMultiBody(
+        #     # for blocking view - same as ground
+        #     baseMass=0,
+        #     baseCollisionShapeIndex=ground_collision_id,
+        #     baseVisualShapeIndex=ground_visual_id,
+        #     basePosition=[
+        #         self.room_dim / 2, 0,
+        #         self.wall_height + self.wall_thickness / 2
+        #     ]
+        # )
 
         # Build camera and LiDAR visualization if render
-        if self.render:
-            camera_visual_id = p.createVisualShape(
-                p.GEOM_BOX, rgbaColor=[0, 0.8, 0, 1.0],
-                halfExtents=[0.03, 0.20, 0.05]
-            )
-            self.camera_id = p.createMultiBody(
-                baseMass=0, baseCollisionShapeIndex=-1,
-                baseVisualShapeIndex=camera_visual_id, basePosition=[0, 0, 0]
-            )
-            lidar_visual_id = p.createVisualShape(
-                p.GEOM_CYLINDER, rgbaColor=[0, 0.8, 0, 1.0], radius=0.08,
-                length=self.lidar_height
-            )
-            self.lidar_id = p.createMultiBody(
-                baseMass=0, baseCollisionShapeIndex=-1,
-                baseVisualShapeIndex=lidar_visual_id, basePosition=[0, 0, 0]
-            )
+        # if self.render:
+        #     camera_visual_id = p.createVisualShape(
+        #         p.GEOM_BOX, rgbaColor=[0, 0.8, 0, 1.0],
+        #         halfExtents=[0.03, 0.20, 0.05]
+        #     )
+        #     self.camera_id = p.createMultiBody(
+        #         baseMass=0, baseCollisionShapeIndex=-1,
+        #         baseVisualShapeIndex=camera_visual_id, basePosition=[0, 0, 0]
+        #     )
+        #     lidar_visual_id = p.createVisualShape(
+        #         p.GEOM_CYLINDER, rgbaColor=[0, 0.8, 0, 1.0], radius=0.08,
+        #         length=self.lidar_height
+        #     )
+        #     self.lidar_id = p.createMultiBody(
+        #         baseMass=0, baseCollisionShapeIndex=-1,
+        #         baseVisualShapeIndex=lidar_visual_id, basePosition=[0, 0, 0]
+        #     )
 
         # Initialize obstacle id list - excluding walls and floors
         self._obs_id_all = []
@@ -496,29 +499,31 @@ class VanillaEnv():
         Args:
             state (np.ndarray): State to be reset.
         """
+        yaw = 0 #np.pi/2
         if "robot_id" in vars(self).keys():
             self._p.resetBasePositionAndOrientation(
                 self.robot_id,
                 posObj=np.append(state[:2], self.robot_com_height),
-                ornObj=self._p.getQuaternionFromEuler([0, 0, state[2]])
+                ornObj=self._p.getQuaternionFromEuler([0, 0, yaw])
             )
         else:
-            robot_visual_id = self._p.createVisualShape(
-                self._p.GEOM_BOX, halfExtents=self.robot_half_dim,
-                rgbaColor=[0.5, 0.5, 0.5, 1]
-            )
-            self.robot_id = self._p.createMultiBody(
-                baseMass=0,  # static
-                baseVisualShapeIndex=robot_visual_id,
-                basePosition=np.append(state[:2], self.robot_com_height),
-                baseOrientation=self._p.getQuaternionFromEuler([
-                    0, 0, state[2]
-                ])
-            )
+            self.robot_id = load_robot_description('go1_description')
+            # robot_visual_id = self._p.createVisualShape(
+            #     self._p.GEOM_BOX, halfExtents=self.robot_half_dim,
+            #     rgbaColor=[0.5, 0.5, 0.5, 1]
+            # )
+            # self.robot_id = self._p.createMultiBody(
+            #     baseMass=0,  # static
+            #     baseVisualShapeIndex=robot_visual_id,
+            #     basePosition=np.append(state[:2], self.robot_com_height),
+            #     baseOrientation=self._p.getQuaternionFromEuler([
+            #         0, 0, yaw
+            #     ])
+            # )
 
     def move_robot(self, action, state):
         """
-        Move the robot with simple Dubins dynamics. Right-hand coordinates.
+        Move the robot with Go1 dynamics. Right-hand coordinates.
 
         Args:
             action (np.ndarray): to be applied.
@@ -526,46 +531,22 @@ class VanillaEnv():
         Returns:
             state: after action applied
         """
-        x, y, theta = state
-        x_dot, y_dot, theta_dot = action
-
-        theta_new = theta + theta_dot * self.dt
-        if theta_new > 2 * np.pi:
-            theta_new -= 2 * np.pi
-        elif theta_new < 0:
-            theta_new += 2 * np.pi
-        # x_new = (
-        #     x + x_dot * np.cos(theta_new) * self.dt
-        #     - y_dot * np.sin(theta_new) * self.dt
-        # )
-        # y_new = (
-        #     y + x_dot * np.sin(theta_new) * self.dt
-        #     + y_dot * np.cos(theta_new) * self.dt
-        # )
-        # # x_new = (
-        # #     x + x_dot * np.cos(theta) * self.dt
-        # #     - y_dot * np.sin(theta) * self.dt
-        # # )
-        # # y_new = (
-        # #     y + x_dot * np.sin(theta) * self.dt
-        # #     + y_dot * np.cos(theta) * self.dt
-        # # )
-        # # theta_new = theta + theta_dot * self.dt
-        # # if theta_new > 2 * np.pi:
-        # #     theta_new -= 2 * np.pi
-        # # elif theta_new < 0:
-        # #     theta_new += 2 * np.pi
-        x_new = x_dot
-        y_new = y_dot
-        theta_new = 0
-        state = np.array([x_new, y_new, theta_new])
+        x, y, vx, vy = state
+        ux, uy = action
+        x_new = x + vx* self.dt
+        y_new = y + vy * self.dt
+        vx_new = vx-k1*self.dt*vx+k5*ux*self.dt -k4*vy*self.dt
+        vy_new = vy-k2*self.dt*vy+k6*uy*self.dt -k3*vx*self.dt
+        # print(vx_new, vy_new)
+        state = np.array([x_new, y_new, vx_new, vy_new])
+        yaw = 0#  np.pi/2
 
         # Update visual
         self._p.resetBasePositionAndOrientation(
             self.robot_id, posObj=np.append(state[:2], self.robot_com_height),
-            ornObj=self._p.getQuaternionFromEuler([0, 0, state[2]])
+            ornObj=self._p.getQuaternionFromEuler([0, 0, yaw])
         )
-        return state, [x_dot, y_dot, theta_dot]
+        return state, action
 
     def move_camera(self, state):
         """
@@ -576,7 +557,8 @@ class VanillaEnv():
         Args:
             state (np.ndarray): State of the robot.
         """
-        x, y, yaw = state
+        x, y, vx, vy = state
+        yaw = 0 #np.pi/2 # face +y direction
         robot_top_height = self.robot_half_dim[2] * 2
 
         # camera
@@ -629,15 +611,15 @@ class VanillaEnv():
         ])
 
         # Update visuals
-        if self.render:
-            self._p.resetBasePositionAndOrientation(
-                self.camera_id, posObj=self.cam_pos_center,
-                ornObj=self._p.getQuaternionFromEuler([0, 0, yaw])
-            )
-            self._p.resetBasePositionAndOrientation(
-                self.lidar_id, posObj=self.lidar_pos,
-                ornObj=self._p.getQuaternionFromEuler([0, 0, 0])
-            )
+        # if self.render:
+        #     self._p.resetBasePositionAndOrientation(
+        #         self.camera_id, posObj=self.cam_pos_center,
+        #         ornObj=self._p.getQuaternionFromEuler([0, 0, yaw])
+        #     )
+        #     self._p.resetBasePositionAndOrientation(
+        #         self.lidar_id, posObj=self.lidar_pos,
+        #         ornObj=self._p.getQuaternionFromEuler([0, 0, 0])
+        #     )
 
     def seed(self, seed=0):
         """

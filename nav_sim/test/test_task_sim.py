@@ -65,7 +65,7 @@ device = torch.device("cuda")
 model.to(device)
 
 # Load the x,y points to sample
-with open('planning/Pset_10Hz.pkl', 'rb') as f:
+with open('planning/pre_compute/Pset.pkl', 'rb') as f:
     samples = pickle.load(f)
     # Remove goal
     samples = samples[:-1][:]
