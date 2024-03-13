@@ -68,7 +68,7 @@ Run the code to get the CP inflation bound:
 ```commandline
 python cp_bound.py
 ```
-If you want to finetune the outputs from 3DETR (using a split CP) and then use this to get a CP bound (using "dataset"):
+If you want to finetune the outputs from 3DETR (using split CP) and then use this to get a CP bound (using "dataset"):
 ```commandline
 python cp_bound_with_finetuning.py
 ```
