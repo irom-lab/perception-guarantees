@@ -48,9 +48,9 @@ python nav_sim/asset/get_task_dataset.py --save_path=<path to save dataset>/task
 python nav_sim/test/test_task_sim.py --task_dataset=<path to save dataset>/task.pkl --save_dataset=<path to save dataset>/
 ```
 Use above task dataset to test the environment with random locations in each room. This code will 
-3.1 Generate the pointclouds through the pybullet sim (we're using the ZED2i camera parameters)
-3.2 Compute the features using 3DETR for each pointcloud in each location of every environment
-3.3 This will generate the following files: `data/features.pt`, `data/bbox_labels.pt`, `data/loss_mask.pt`, and `data/finetune.pt`. This is the calibration dataset.
+i) Generate the pointclouds through the pybullet sim (we're using the ZED2i camera parameters)
+ii) Compute the features using 3DETR for each pointcloud in each location of every environment
+iii) This will generate the following files: `data/features.pt`, `data/bbox_labels.pt`, `data/loss_mask.pt`, and `data/finetune.pt`. This is the calibration dataset.
 
 4. Sim datset generation:
 Repeat the first two steps (1-2) and save a new task_sim.pkl file with new rooms:
