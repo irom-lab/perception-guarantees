@@ -47,6 +47,8 @@ python nav_sim/asset/get_task_dataset.py --save_path=<path to save dataset>/task
 ```console
 python nav_sim/test/test_task_sim.py --task_dataset=<path to save dataset>/task.pkl --save_dataset=<path to save dataset>/
 ```
+Note that Line 68 in the above code uses the same samples that are eventually used in planning (assumed to be available in 'planning/pre_compute/Pset.pkl'). You can generate these samples using `generate_samples.py' as noted earlier.
+
 Use above task dataset to test the environment with random locations in each room. This code will 
 i) Generate the pointclouds through the pybullet sim (we're using the ZED2i camera parameters)
 ii) Compute the features using 3DETR for each pointcloud in each location of every environment
