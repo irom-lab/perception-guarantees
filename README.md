@@ -28,6 +28,9 @@ Install plyfile:
 pip install plyfile
 ```
 
+## Run the planner code
+To run a simple example: 1) generate samples using `generate_samples.py`, 2) run `example_plan.py`. 
+
 ## Generating the calibration dataset with Pybullet sim (in nav_sim)
 
 1. After following the installation instructions in the nav_sim README, run script to generate the room configurations (change folder name as required):
@@ -53,13 +56,12 @@ Use above task dataset to test the environment with random locations in each roo
 Repeat the first two steps (1-2) and save a new task_sim.pkl file with new rooms:
 ```console
 python nav_sim/asset/get_room_from_3dfront.py --save_task_folder=<path to save dataset>/rooms_sim --mesh_folder=<path to save dataset>/3D-FUTURE-model-tiny --num_room=100 --seed=33 --sim=True
+```
 
 5. Generate task dataset by aggregating the room configurations:
 ```console
 python nav_sim/asset/get_task_dataset.py --save_path=<path to save dataset>/task_sim.pkl --task_folder=<path to save dataset>/rooms_sim
 ```
-## Run the planner code
-To run a simple example: 1) generate samples using `generate_samples.py`, 2) run `example_plan.py`. 
 
 ## Obtain the CP inflation bound using the calibration dataset
 Run the code to get the CP inflation bound:
