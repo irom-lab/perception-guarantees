@@ -52,7 +52,7 @@ i) Generate the pointclouds through the pybullet sim (we're using the ZED2i came
 ii) Compute the features using 3DETR for each pointcloud in each location of every environment
 iii) This will generate the following files: `data/features.pt`, `data/bbox_labels.pt`, `data/loss_mask.pt`, and `data/finetune.pt`. This is the calibration dataset.
 
-4. Sim datset generation:
+4. Sim dataset generation:
 Repeat the first two steps (1-2) and save a new task_sim.pkl file with new rooms:
 ```console
 python nav_sim/asset/get_room_from_3dfront.py --save_task_folder=<path to save dataset>/rooms_sim --mesh_folder=<path to save dataset>/3D-FUTURE-model-tiny --num_room=100 --seed=33 --sim=True
