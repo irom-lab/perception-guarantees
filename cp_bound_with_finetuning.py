@@ -69,8 +69,6 @@ def main(raw_args=None):
 	w2 = torch.tensor(0.5).to(device) #0.1
 	w3 = torch.tensor(0.1).to(device) #1
 
-	model_cp.load_state_dict(torch.load("trained_models/perception_model_planner"))
-
 	# Run the finetuning  loop
 	print("Finetuning")
 	num_epochs = 200 # 1000
