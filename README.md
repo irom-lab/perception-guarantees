@@ -84,7 +84,8 @@ If you want to test the planner on many sim environments (generated the using st
 ```commandline
 python planner_test_task.py
 ```
-In this code the task folder is called rooms_multiple, but you can change it to wherever you saved your test sim environment tasks.
+In this code the task folder is called rooms_sim, but you can change it to wherever you saved your test sim environment tasks. 
+Note that if you have a finetuned model and you want to test that, set is_finetune = True
 
 ## Notes
 
