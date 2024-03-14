@@ -80,7 +80,7 @@ python cp_bound_with_finetuning.py
 ```
 
 ## Run experiments in sim
-If you want to test the planner on many sim environments (generated the using steps 1-2 of the code used to generate the calibration dataset), run
+If you want to test the planner on many sim environments (generated the using steps 4-5 of the code used to generate the calibration dataset), run
 ```commandline
 python planner_test_task.py
 ```
