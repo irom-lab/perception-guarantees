@@ -88,7 +88,7 @@ if is_finetune:
     model_cp.load_state_dict(torch.load("trained_models/perception_model"))
 print("CP: ", cp)
 
-foldername = "../data/perception-guarantees/rooms_multiple/"
+foldername = "../data/perception-guarantees/rooms_sim/"
 
 def state_to_planner(state, sp):
     # convert robot state to planner coordinates
