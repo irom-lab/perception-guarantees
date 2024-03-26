@@ -18,7 +18,7 @@ Install PyTorch 1.9.0:
 pip install torch==1.9.0+cu102 torchvision==0.10.0+cu102 torchaudio==0.9.0 -f https://download.pytorch.org/whl/torch_stable.html
 ```
 
-Alternatively you can also run (installs cuda 11.7)
+Alternatively you can also run (for a cuda 11.7 install)
 ```
 pip install -r requirements.txt
 ```
