@@ -11,15 +11,7 @@ Download assets and datasets from 3D-Front: https://tianchi.aliyun.com/specials/
 
 Replace the 'model_info.json' file contents with the 'model_info.json' file given in this code. The reason for this is we found that a lot of objects we used from the dataset were misclassified as chairs. The file provided here has removed the misclassified objects.
 
-Install CUDA 10.2 (we have also have it working with CUDA 11.7).
-
-Install PyTorch 1.9.0:
-```
-pip install torch==1.9.0+cu102 torchvision==0.10.0+cu102 torchaudio==0.9.0 -f https://download.pytorch.org/whl/torch_stable.html
-```
-
-Alternatively you can also run (for a cuda 11.7 install)
-```
+Run (for a cuda 11.7 install)```
 pip install -r requirements.txt
 ```
 Install pointnet2:
