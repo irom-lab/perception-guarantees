@@ -7,9 +7,9 @@ Website: https://perceive-with-confidence.github.io/
 
 ## Installation
 
-Install [`iGibson`](https://stanfordvl.github.io/iGibson/installation.html). Also download assets and datasets. 
+Download assets and datasets from 3D-Front: https://tianchi.aliyun.com/specials/promotion/alibaba-3d-scene-dataset
 
-Install [`Meshlab`](https://www.meshlab.net/) for visualizing point clouds and debugging.
+Replace the 'model_info.json' file contents with the 'model_info.json' file given in this code. The reason for this is we found that a lot of objects we used from the dataset were misclassified as chairs. The file provided here has removed the misclassified objects.
 
 Install CUDA 10.2 (we have also have it working with CUDA 11.7).
 
