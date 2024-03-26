@@ -20,11 +20,6 @@ Install pointnet2:
 cd third_party/pointnet2 && python setup.py install
 ```
 
-Install plyfile:
-```
-pip install plyfile
-```
-
 ## Run the planner code
 To run a simple example: 1) generate samples using `generate_samples.py`, 2) run `example_plan.py`. 
 
