@@ -21,7 +21,8 @@ cd third_party/pointnet2 && python setup.py install
 ```
 
 ## Run the planner code
-To run a simple example: 1) generate samples using `generate_samples.py`, 2) run `example_plan.py`. 
+To run a simple example: 1) download pre-computed samples [here](https://drive.google.com/drive/folders/1OJpOyWaD7Wnsqb16qsrWaPtZHYkquXiw?usp=sharing), 2) run `example_plan.py` (change the directory of downloaded samples accordingly). 
+Alternatively, you can generate your own samples with `generate_samples.py`.
 
 ## Generating the calibration dataset with Pybullet sim (in nav_sim)
 
