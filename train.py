@@ -36,7 +36,7 @@ def main(raw_args=None):
 	# dataset = PointCloudDataset("data/features15_cal_variable_chairs.pt", "data/bbox_labels15_cal_variable_chairs.pt", "data/loss_mask15_cal_variable_chairs.pt")
 	# dataset = PointCloudDataset("data/features15_cal.pt", "data/bbox_labels15_cal.pt", "data/loss_mask15_cal.pt")
 	# prior_dataset = PointCloudDataset("data/features15_prior.pt", "data/bbox_labels15_prior.pt", "data/loss_mask15_prior.pt", "data/finetune15_prior.pt")
-	test_dataset = PointCloudDataset("data/features15_test_variable_chairs.pt", "data/bbox_labels15_test_variable_chairs.pt", "data/loss_mask15_test_variable_chairs.pt", "data/finetune15_test_variable_chairs.pt")
+	# test_dataset = PointCloudDataset("data/features15_test_variable_chairs.pt", "data/bbox_labels15_test_variable_chairs.pt", "data/loss_mask15_test_variable_chairs.pt", "data/finetune15_test_variable_chairs.pt")
 	# test_dataset = PointCloudDataset("data/features_test.pt", "data/bbox_labels_test.pt", "data/loss_mask_test.pt")
 	batch_size = 100 #100
 	N=len(dataset)
@@ -45,14 +45,15 @@ def main(raw_args=None):
 	delta = 0.009
 	deltap = 0.001
 	num_evaluations = 10000
+	split_cp_size = 100
 
 	params = {'batch_size': batch_size,
 				'shuffle': False}
 			   # 'num_workers': 12}
 	dataloader = DataLoader(dataset, **params)
 	# dataloader_prior = DataLoader(prior_dataset, batch_size=1)
-	dataloader_test = DataLoader(test_dataset, batch_size=1)
-	dataloader_cp = DataLoader(dataset, batch_size=len(dataset))
+	dataloader_test = DataLoader(dataset, batch_size=1)
+	dataloader_cp = DataLoader(dataset, batch_size=len(dataset)-split_cp_size)
 	###################################################################
 
 	###################################################################
@@ -80,64 +81,64 @@ def main(raw_args=None):
 	w2 = torch.tensor(0.5).to(device) #0.1
 	w3 = torch.tensor(0.1).to(device) #1
 
-	model_cp.load_state_dict(torch.load("trained_models/perception_model_planner"))
+	# model_cp.load_state_dict(torch.load("trained_models/perception_model_planner"))
 
-	# # Run the finetuning  loop
-	# print("Finetuning")
-	# num_epochs = 200 # 1000
-	# for epoch in range(0, num_epochs):
+	# Run the finetuning  loop
+	print("Finetuning")
+	num_epochs = 200 # 1000
+	for epoch in range(0, num_epochs):
 
-	# 	# Initialize running losses for this epoch
-	# 	current_loss = 0.0
-	# 	current_loss_true = 0.0
-	# 	num_batches = 0
-	# 	for i, data in enumerate(dataloader_test, 0):
+		# Initialize running losses for this epoch
+		current_loss = 0.0
+		current_loss_true = 0.0
+		num_batches = 0
+		for i, data in enumerate(dataloader_test, 0):
+			if i >= split_cp_size:
 
-	# 		# Get inputs, targets, loss mask
-	# 		inputs, targets, loss_mask, finetune = data
-	# 		inputs = inputs.to(device)
-	# 		boxes_3detr = finetune["bboxes_3detr"].to(device)
-	# 		boxes_gt = finetune["bboxes_gt"].to(device)
-	# 		loss_mask = torch.ones(loss_mask.shape[0], loss_mask.shape[1],  boxes_gt.shape[2]).to(device)
-	# 		# print(loss_mask.shape, boxes_gt.shape)
+				# Get inputs, targets, loss mask
+				inputs, targets, loss_mask, finetune = data
+				inputs = inputs.to(device)
+				boxes_3detr = finetune["bboxes_3detr"].to(device)
+				boxes_gt = finetune["bboxes_gt"].to(device)
+				loss_mask = torch.ones(loss_mask.shape[0], loss_mask.shape[1],  boxes_gt.shape[2]).to(device)
 
-	# 		# Perform forward pass
-	# 		outputs = model_cp(inputs).to(device)
-	# 		if  torch.any(torch.isnan(outputs)):
-	# 			# ipy.embed()
-	# 			idx = torch.where(torch.isnan(outputs))
-	# 			outputs[idx] = 0.0
-	# 			# loss_mask[idx[0], idx[1], idx[2]] = 0
-	# 			# print("Skipping ", i)
-	# 			# continue
-	# 		# Compute loss
-	# 		# print("Outputs: ", outputs.shape, " Boxes 3DETR: ", boxes_3detr.shape, " boxes gt: ", boxes_gt.shape, " Loss mask: ", loss_mask.shape)
-	# 		loss = box_loss_diff_jit(outputs + boxes_3detr, boxes_gt, w1, w2, w3, loss_mask)
+				# Perform forward pass
+				outputs = model_cp(inputs).to(device)
+				if  torch.any(torch.isnan(outputs)):
+					# ipy.embed()
+					idx = torch.where(torch.isnan(outputs))
+					outputs[idx] = 0.0
+					# loss_mask[idx[0], idx[1], idx[2]] = 0
+					# print("Skipping ", i)
+					# continue
+				# Compute loss
+				# print("Outputs: ", outputs.shape, " Boxes 3DETR: ", boxes_3detr.shape, " boxes gt: ", boxes_gt.shape, " Loss mask: ", loss_mask.shape)
+				loss = box_loss_diff_jit(outputs + boxes_3detr, boxes_gt, w1, w2, w3, loss_mask)
 
-	# 		# Compute true (boolean) version of loss for this batch
-	# 		loss_true, not_enclosed = box_loss_true(outputs + boxes_3detr, boxes_gt, loss_mask, 0.01)
+				# Compute true (boolean) version of loss for this batch
+				loss_true, not_enclosed = box_loss_true(outputs + boxes_3detr, boxes_gt, loss_mask, 0.01)
 
-	# 		# Zero the gradients
-	# 		optimizer_cp.zero_grad()
+				# Zero the gradients
+				optimizer_cp.zero_grad()
 
-	# 		# Perform backward pass
-	# 		loss.backward()
+				# Perform backward pass
+				loss.backward()
 
-	# 		# Perform optimization
-	# 		optimizer_cp.step()
-	# 		# Update current loss for this epoch (summing across batches)
-	# 		current_loss += loss.item()
-	# 		current_loss_true += loss_true.item()
-	# 		num_batches += 1
-	# 	# Print losses (averaged across batches in this epoch)
-	# 	print_interval = 1
-	# 	if verbose and (epoch % print_interval == 0):
-	# 		print("epoch: ", epoch, "; loss: ", '{:02.6f}'.format(current_loss/num_batches),
-	# 			  "; loss true: ", '{:02.6f}'.format(current_loss_true / num_batches), end='\r')
-	# # 	###################################################################
+				# Perform optimization
+				optimizer_cp.step()
+				# Update current loss for this epoch (summing across batches)
+				current_loss += loss.item()
+				current_loss_true += loss_true.item()
+				num_batches += 1
+		# Print losses (averaged across batches in this epoch)
+		print_interval = 1
+		if verbose and (epoch % print_interval == 0):
+			print("epoch: ", epoch, "; loss: ", '{:02.6f}'.format(current_loss/num_batches),
+				  "; loss true: ", '{:02.6f}'.format(current_loss_true / num_batches), end='\r')
+	# 	###################################################################
 
-	# torch.save(model_cp.state_dict(), "trained_models/perception_model_w205")
-	# #################################################################
+	torch.save(model_cp.state_dict(), "trained_models/perception_model100")
+	#################################################################
 	# # Without finetuning
 	# for i, data in enumerate(dataloader_cp, 0):
 	# 	inputs, targets, loss_mask = data
@@ -155,6 +156,7 @@ def main(raw_args=None):
 	# With finetuning
 	print("Calculating CP with finetuned model...")
 	for i, data in enumerate(dataloader_cp, 0):
+		if i < 1:
 			inputs, targets, loss_mask, finetune = data
 			# print(len(dataset), len(inputs))
 			inputs = inputs.to(device)
