@@ -43,6 +43,7 @@ Run the training loop:
 ```commandline
 python train.py
 ```
+
 The neural network model is in `model_perception.py`. Currently, it is a simple MLP. The training code will 
 generate a model which is saved in `trained_models/perception_model`.
 
@@ -78,6 +79,12 @@ Run the training loop:
 ```commandline
 python train.py
 ```
+
+If this doesn't work, try:
+```commandline
+PYTORCH_JIT=0 python train.py
+```
+
 The above code will finetune the outputs from 3DETR (using the "prior dataset") and then use this to get a CP bound (using "dataset"). The code that is commented out provides a similar guarantee using PAC-Bayes. Then we evaluate the bounds from CP and Pac-Bayes and compare the two (using "test dataset").
 
 Note that compute_features_nav_sim.py is no longer needed and has been combined into test_task_sim.py
