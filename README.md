@@ -43,6 +43,10 @@ Run the training loop:
 ```commandline
 python train.py
 ```
+If this doesn't work, try:
+```commandline
+PYTORCH_JIT=0 python train.py
+```
 The neural network model is in `model_perception.py`. Currently, it is a simple MLP. The training code will 
 generate a model which is saved in `trained_models/perception_model`.
 
