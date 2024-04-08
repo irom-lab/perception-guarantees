@@ -32,9 +32,9 @@ except RuntimeError:
 
 from models.model_perception import MLPModelDet
 
-f = open('planning/pre_compute/reachable_10Hz.pkl', 'rb')
+f = open('planning/reachable_10Hz.pkl', 'rb')
 reachable = pickle.load(f)
-f = open('planning/pre_compute/Pset_10Hz.pkl', 'rb')
+f = open('planning/Pset_10Hz.pkl', 'rb')
 Pset = pickle.load(f)
 dt = 0.1
 print("dt=", dt)
@@ -66,15 +66,15 @@ num_in = 32768
 num_out = (15, 2,3) # bbox corner representation
 model_cp = MLPModelDet(num_in, num_out)
 model_cp.to(device)
-model_cp.load_state_dict(torch.load("trained_models/perception_model"))
+# model_cp.load_state_dict(torch.load("trained_models/perception_model"))
 
 # Load params from json file
 with open("env_params.json", "r") as read_file:
     params = json.load(read_file)
 
 robot_radius = 0.3
-# cp = 0.05 # 85%
-cp=0.75 # 85%
+# cp = 0.05 # 85% for rooms_multiple
+# cp=0.75 # 85%
 # cp = 1.33 # 95%
 # cp = 0.101 # 95%
 # cp = 0.83 # 90%
@@ -83,12 +83,14 @@ cp=0.75 # 85%
 # cp = 0.025 # 80%
 # cp = 0.63 # 75%
 # cp = 0.016 # 75%
+
+cp = 0.0 # 85% for occlusion
 is_finetune=False
 if is_finetune:
     cp=0.65
 print("CP: ", cp)
 
-foldername = "../data/perception-guarantees/rooms_multiple/"
+foldername = "../data/perception-guarantees/rooms_occlusion/"
 
 def state_to_planner(state, sp):
     # convert robot state to planner coordinates
@@ -109,19 +111,20 @@ def boxes_to_planner_frame(boxes, sp):
 
 def plan_env(task):
     # initialize planner
-    visualize = True
-    task.goal_radius = 1.0
+    visualize = False
+    # task.goal_radius = 1.0
+    task.goal_radius = 2.0
     filename = foldername + str(task.env) + '/cp' + str(cp)
     grid_data = np.load((foldername + str(task.env) + '/occupancy_grid.npz'), allow_pickle=True)
     occupancy_grid = grid_data['arr_0']
     N, M = occupancy_grid.shape
     env = TaskEnv(render=visualize)
-    # init_state = [1,-3,-np.pi/2]
-    task.init_state = [0.2,-1,0,0]
-    task.goal_loc = [7, -2]
-    # task.init_state = [float(v) for v in init_state]
-    # task.goal_loc = [float(v) for v in goal_loc]
-    planner_init_state = [5,0.2,0,0]
+    # task.init_state = [0.2,-1,0,0]
+    # task.goal_loc = [7, -2]
+    task.init_state = [0.2,0,0,0]
+    task.goal_loc = [7.1, 0]
+    # planner_init_state = [5,0.2,0,0]
+    planner_init_state = [4,0.2,0,0]
     sp = Safe_Planner(init_state=planner_init_state, FoV=70*np.pi/180, n_samples=2000,dt=dt,radius = 0.1, sensor_dt=0.2, max_search_iter=2000)
     sp.load_reachable(Pset, reachable)
     env.dt = sp.dt
@@ -193,6 +196,16 @@ def plan_env(task):
                 observation, reward, done, info = env.step(action)
                 # time.sleep(sp.dt)
                 t += sp.dt
+                state = env._state
+                state_traj.append(state_to_planner(state, sp))
+                for obs in task.piece_bounds_all:
+                    if state[0] < obs[3] and state[0] > obs[0]:
+                        if state[1] < obs[4] and state[1] > obs[1]: 
+                            og_loc = [round(state[0]/0.1)+1 , round((state[1]+4)/0.1)+1]
+                        #    if occupancy_grid[og_loc[0], og_loc[1]]:
+                            print("Env: ", str(task.env), " Collision")
+                            collided = True
+                            break
             else:
                 action = [0,0]
                 observation, reward, done, info = env.step(action)
@@ -431,7 +444,7 @@ if __name__ == '__main__':
     num_envs = 100
 
     # Number of parallel threads
-    num_parallel = 1
+    num_parallel = 5
     ##################################################################
 
     # _, _, _ = render_env(seed=0)
@@ -449,7 +462,7 @@ if __name__ == '__main__':
         # save_tasks += [task]
         env += 1 
         if env%batch_size == 0:
-            if env == 9: # In case code stops running, change starting environment to last batch saved
+            if env>0 and env<100: # In case code stops running, change starting environment to last batch saved
                 batch = math.floor(env/batch_size)
                 print("Saving batch", str(batch))
                 t_start = time.time()
