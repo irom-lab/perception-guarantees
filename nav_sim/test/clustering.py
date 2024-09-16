@@ -38,7 +38,7 @@ def is_box_visible(X, obstacles, visualize):
         ax.set_xlabel('X')
         ax.set_ylabel('Y')
         ax.set_zlabel('Z')
-        ax.set_aspect('equal')
+        # ax.set_aspect('equal')
         plt.show()
     return is_vis
 

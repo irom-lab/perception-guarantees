@@ -33,6 +33,8 @@ sys.path.append('../datasets')
 from utils.pc_util import preprocess_point_cloud, pc_cam_to_3detr, random_sampling
 import warnings
 warnings.filterwarnings("error")
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 import IPython as ipy
 from models import build_model
 from datasets.sunrgbd import SunrgbdDatasetConfig as dataset_config
@@ -65,7 +67,7 @@ device = torch.device("cuda")
 model.to(device)
 
 # Load the x,y points to sample
-with open('planning/pre_compute/Pset.pkl', 'rb') as f:
+with open('planning/pre_compute/Pset-1.5k.pkl', 'rb') as f:
     samples = pickle.load(f)
     # Remove goal
     samples = samples[:-1][:]
@@ -86,7 +88,7 @@ with open("env_params.json", "r") as read_file:
 def run_env(task):
     visualize = False
     verbose = 0
-    init_state = [0,-3.5,0]
+    init_state = [0,-3.5,0,0]
     goal_loc = [7.5,3.5]
     task.init_state = [float(v) for v in init_state]
     task.goal_loc = [float(v) for v in goal_loc]
@@ -120,7 +122,7 @@ def run_env(task):
 
         # Convert from camera frame to world frame
         is_visible.append(task.observation.is_visible[step])
-
+    env.close_pb()
     return {"box_axis_aligned": np.array(bbs), 
             "box_features": all_box_features,
             "bbox_labels": np.array(gt_obs), 
@@ -130,7 +132,7 @@ def run_env(task):
             
 
 def run_step(env, task, x, y, step, visualize=False):
-    action  = [x[step],y[step],0]
+    action  = [x[step],y[step]]
     observation, reward, done, info = env.step(action)
     num_chairs = len(task.piece_bounds_all) # Number of chairs in the current environment
     num_boxes = 15 # Number of boxes we want to predict using 3DETR
@@ -299,7 +301,7 @@ def plot_box_pc(pc, output_boxes, gt_boxes, is_vis):
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
-    ax.set_aspect('equal')
+    # ax.set_aspect('equal')
 
     for jj, cc in enumerate(output_boxes):
         r0 = [cc[0, 0], cc[1, 0]]
@@ -372,11 +374,11 @@ def combine_old_files(filenames, num_files):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--task_dataset', default='/home/anushri/Documents/Projects/data/perception-guarantees/task.pkl',
+        '--task_dataset', default='/home/zm2074/Projects/data/perception-guarantees/task_0803.pkl',
         nargs='?', help='path to save the task files'
     )
     parser.add_argument(
-        '--save_dataset', default='/home/anushri/Documents/Projects/data/perception-guarantees/task.npz',
+        '--save_dataset', default='/home/zm2074/Projects/data/perception-guarantees/calibrate_1.5k/',
         nargs='?', help='path to save the task files'
     )
     args = parser.parse_args()
@@ -419,9 +421,10 @@ if __name__ == '__main__':
         task.observation.lidar.vertical_fov = 30  # half in one direction, in degree
         task.observation.lidar.max_range = 5 # in meter Anushri changed from 5 to 8
 
+        task.mesh_parent_folder = '/home/zm2074/Projects/data/perception-guarantees/3D-FUTURE-model-tiny'
     ##################################################################
     # Number of environments
-    num_envs = 100
+    num_envs = 400
 
     # Number of parallel threads
     num_parallel = 10
@@ -438,6 +441,7 @@ if __name__ == '__main__':
 
     for task in task_dataset:
         env += 1 
+        print("Environment", str(env))
         if env%batch_size == 0:
             if env>0: # In case code stops running, change starting environment to last batch saved
                 batch = math.floor(env/batch_size)

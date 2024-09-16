@@ -11,13 +11,14 @@ from itertools import product, combinations
 
 from planning.Safe_Planner import *
 # from nav_sim.env.go1_env import Go1Env
-from nav_sim.env.task_env import TaskEnv
+from nav_sim.env.task_env_exp import TaskEnv
 
 from utils.pc_util import preprocess_point_cloud, pc_to_axis_aligned_rep, random_sampling
 from utils.box_util import box2d_iou
 from utils.make_args import make_args_parser
 
 from nav_sim.asset.util import state_lin_to_bin, state_bin_to_lin
+from nav_sim.test.clustering import is_box_visible
 
 from models import build_model
 from datasets.sunrgbd import SunrgbdDatasetConfig as dataset_config
@@ -32,9 +33,9 @@ except RuntimeError:
 
 from models.model_perception import MLPModelDet
 
-f = open('planning/pre_compute/reachable.pkl', 'rb')
+f = open('planning/pre_compute/reachable-1.5k.pkl', 'rb')
 reachable = pickle.load(f)
-f = open('planning/pre_compute/Pset.pkl', 'rb')
+f = open('planning/pre_compute/Pset-1.5k.pkl', 'rb')
 Pset = pickle.load(f)
 dt = 0.1
 print("dt=", dt)
@@ -71,7 +72,7 @@ with open("env_params.json", "r") as read_file:
 
 robot_radius = 0.3
 # cp = 0.05 # 85% baseline
-cp=0.75 # 85% PwC
+# cp=0.75 # 85% PwC
 # cp = 1.33 # 95% PwC
 # cp = 0.101 # 95% baseline
 # cp = 0.83 # 90% PwC
@@ -80,6 +81,10 @@ cp=0.75 # 85% PwC
 # cp = 0.025 # 80% baseline
 # cp = 0.63 # 75% PwC
 # cp = 0.016 # 75% baseline
+# cp = 0.6249 # 500 samples
+# cp = 0.7086 # 1k samples
+cp = 0.6910 # 1.5k samples
+# cp = 0.7441 # 2k samples
 is_finetune=False
 if is_finetune:
     cp=0.65 # 85% PwC
@@ -88,7 +93,7 @@ if is_finetune:
     model_cp.load_state_dict(torch.load("trained_models/perception_model"))
 print("CP: ", cp)
 
-foldername = "../data/perception-guarantees/rooms_sim/"
+foldername = "../data/perception-guarantees/rooms_multiple/"
 
 def state_to_planner(state, sp):
     # convert robot state to planner coordinates
@@ -107,9 +112,30 @@ def boxes_to_planner_frame(boxes, sp):
         boxes_new[i,:,1] =  boxes[i,:,0]
     return boxes_new
 
+def count_misdetection(pred_boxes, ground_truth, X, piece_bounds):
+    if(len(X) > 0):
+        is_vis = is_box_visible(X, piece_bounds, visualize=False)
+    else: 
+        is_vis = [False]*len(ground_truth)
+    num_is_vis = 0
+    misdetected = 0
+    for ii in range(len(ground_truth)):
+        detected = False
+        num_is_vis += 1 if is_vis[ii] == True else 0
+        for jj in range(len(pred_boxes)):
+            if is_vis[ii] and ((ground_truth[ii,0,0]>= pred_boxes[jj,0,0]) and (ground_truth[ii,0,1]>= pred_boxes[jj,0,1]) and (ground_truth[ii,1,0]<= pred_boxes[jj,1,0]) and (ground_truth[ii,1,1]<= pred_boxes[jj,1,1])):
+                detected = True
+                break
+        if is_vis[ii] and not detected:
+            misdetected+=1
+    if num_is_vis == 0:
+        return 0
+    else:
+        return (misdetected/num_is_vis)
+
 def plan_env(task):
     # initialize planner
-    visualize = True
+    visualize = False
     task.goal_radius = 1.0
     filename = foldername + str(task.env) + '/cp' + str(cp)
     grid_data = np.load((foldername + str(task.env) + '/occupancy_grid.npz'), allow_pickle=True)
@@ -122,7 +148,7 @@ def plan_env(task):
     # task.init_state = [float(v) for v in init_state]
     # task.goal_loc = [float(v) for v in goal_loc]
     planner_init_state = [5,0.2,0,0]
-    sp = Safe_Planner(init_state=planner_init_state, FoV=70*np.pi/180, n_samples=2000,dt=dt,radius = 0.1, sensor_dt=0.2, max_search_iter=2000)
+    sp = Safe_Planner(init_state=planner_init_state, FoV=70*np.pi/180, n_samples=len(Pset)-1,dt=dt,radius = 0.1, sensor_dt=0.2, max_search_iter=2000)
     sp.load_reachable(Pset, reachable)
     env.dt = sp.dt
     env.reset(task)
@@ -135,8 +161,12 @@ def plan_env(task):
     ground_truth = boxes_to_planner_frame(np.array(gt_obs), sp)
     done = False
     collided = False
+    misdetected = 0
+    time_misdetected = 0
     prev_policy = []
     idx_prev = 0
+    plan_fail = 0
+
     while True and not done and not collided:
         state = state_to_planner(env._state, sp)
         # print(state)
@@ -145,18 +175,32 @@ def plan_env(task):
         boxes[:,0,:] -= cp
         boxes[:,1,:] += cp
         boxes = boxes_to_planner_frame(boxes, sp)
+        ###########################################################################
+        X = observation[:, (observation[2, :] >0.1)]
+        X = X[:, np.abs(X[1,:]) < 3.9]
+        X = X[:, X[0,:]>0.05]
+        X = X[:, X[0,:] < 7.95]
+        
+        X = np.transpose(np.array(X))
+        misdetected += count_misdetection(boxes, ground_truth, X, task.piece_bounds_all)
+        # print("Misdetected: ", misdetected)
+        time_misdetected+=1
+        ###########################################################################
+
         st = time.time()
-        try:
-            res = sp.plan(state, boxes)
-        except:
-            print("Env: ", str(task.env), " Failed to get plan, Code Error")
-            continue
+        # try:
+        res = sp.plan(state, boxes)
+        #     if len(res[1]) == 0:
+        #         plan_fail += 1
+        # except:
+        #     print("Env: ", str(task.env), " Failed to get plan, Code Error")
+        #     continue
             # plot_results(filename, state_traj , ground_truth, sp)
             # return {"trajectory": np.array(state_traj), "done": done, "collision": collided}
         t+=(time.time() - st)
-        if (steps_taken % 1) == 0 and visualize:
+        if (steps_taken % 10) == 0 and visualize:
             # sp.show_connection(res[0]) 
-            sp.world.show(true_boxes=ground_truth)
+            # sp.world.show(true_boxes=ground_truth)
             sp.show(res[0], true_boxes=np.array(ground_truth))
         steps_taken+=1
         if len(res[0]) > 1 and not done and not collided:
@@ -203,11 +247,11 @@ def plan_env(task):
             #     state = env._state
             #     state_traj.append(state_to_planner(state, sp))
             #     t += sp.dt
-        if t >140:
+        if t > 140 or plan_fail > 10:
             print("Env: ", str(task.env), " Failed")
             break
     plot_results(filename, state_traj , ground_truth, sp)
-    return {"trajectory": np.array(state_traj), "done": done, "collision": collided}
+    return {"trajectory": np.array(state_traj), "done": done, "collision": collided, "misdetection": (misdetected/time_misdetected)}
 
 def plot_results(filename, state_traj , ground_truth, sp):
     fig, ax = sp.world.show(true_boxes=ground_truth)
@@ -215,9 +259,11 @@ def plot_results(filename, state_traj , ground_truth, sp):
     if len(state_traj) >0:
         state_tf = np.squeeze(np.array(state_traj)).T
         print('state tf', state_tf.shape)
+        if state_tf.shape == (4,):
+            state_tf = state_tf.reshape((4,1))
         ax.plot(state_tf[0, :], state_tf[1, :], c='r', linewidth=1, label='state')
     plt.legend()
-    plt.savefig(filename + 'traj_plot_10Hz.png')
+    plt.savefig(filename + 'traj_plot_1.5k.png')
     # plt.show()
 
 def get_box(observation_, visualize = False):
@@ -357,11 +403,11 @@ def multi_run_wrapper(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--task_dataset', default='/home/anushri/Documents/Projects/data/perception-guarantees/task.pkl',
+        '--task_dataset', default='/home/zm2074/Projects/data/perception-guarantees/task_multiple.pkl',
         nargs='?', help='path to save the task files'
     )
     parser.add_argument(
-        '--save_dataset', default='/home/anushri/Documents/Projects/data/perception-guarantees/task++.npz',
+        '--save_dataset', default='/home/zm2074/Projects/data/perception-guarantees/task_multiple.npz',
         nargs='?', help='path to save the task files'
     )
     args = parser.parse_args()
@@ -420,13 +466,13 @@ if __name__ == '__main__':
     num_envs = 100
 
     # Number of parallel threads
-    num_parallel = 1
+    num_parallel = 10
     ##################################################################
 
     # _, _, _ = render_env(seed=0)
 
     ##################################################################
-    env = 0
+    env = 53
     batch_size = num_parallel
     save_file = args.save_dataset
     save_res = []
@@ -450,7 +496,7 @@ if __name__ == '__main__':
                 ii = 0
                 for result in results.get():
                     # Save data
-                    file_batch = foldername+ str(env-batch_size+ii) + "/cp_" + str(cp) + "_10Hz.npz"
+                    file_batch = foldername+ str(env-batch_size+ii) + "/cp_" + str(cp) + "_1.5k.npz"
                     np.savez_compressed(file_batch, data=result)
                     ii+=1
         # result = plan_env(task)

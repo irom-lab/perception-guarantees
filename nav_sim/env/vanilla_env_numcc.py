@@ -10,14 +10,18 @@ import numpy as np
 import torch
 import pybullet as pb
 from pybullet_utils import bullet_client as bc
-import pybullet_data
+import pickle
+import plotly.express as px
+from scipy.ndimage import median_filter
+
 
 from nav_sim.util.misc import rgba2rgb
-# from robot_descriptions.loaders.pybullet import load_robot_description
 
-k1=3.968; k2=2.517; k3=0.1353; k4=-0.5197; k5 = 4.651; k6 = 2.335
-# print("Controller gains, k1", k1, " k2 ", k2, " k3 ", k3, " k4 ", k4, " k5 ", k5, " k6 ", k6)
-
+[k1, k2, A, B, R, BRB] = pickle.load(open('planning/sp_var.pkl','rb'))
+k3 = A[2,3]
+k4 = A[3,2]
+k5 = B[3,1]
+k6 = B[2,0]
 class VanillaEnv():
 
     def __init__(
@@ -40,15 +44,15 @@ class VanillaEnv():
         self.room_dim = 8
         self.wall_thickness = 0.1
         self.wall_height = 4
-        self.ground_rgba = [175/255, 175/255, 175/255, 1.0]
+        self.ground_rgba = [0.8, 0.8, 0.8, 1.0]
         self.back_wall_rgba = [199 / 255, 182 / 255, 191 / 255, 1.0]
         self.left_wall_rgba = [199 / 255, 182 / 255, 191 / 255, 1.0]
         self.right_wall_rgba = [199 / 255, 182 / 255, 191 / 255, 1.0]
         self.front_wall_rgba = [199 / 255, 182 / 255, 191 / 255, 1.0]
 
         # Robot dimensions TODO: get Go1 dimensions
-        self.robot_half_dim = [0.323, 0.14, 0.2]
-        self.robot_com_height = self.robot_half_dim[2]+0.3
+        self.robot_half_dim = [0.323, 0.14, 0.2] 
+        self.robot_com_height = self.robot_half_dim[2]
         self.lidar_height = 0.15
         self.camera_thickness = 0.04
 
@@ -150,49 +154,51 @@ class VanillaEnv():
             state (np.ndarray): (x, y, yaw)
 
         Returns:
-            np.ndarray: RGB or depth image, of the shape (C, H, W)
+            np.ndarray: RGB or depth image or both, of the shape (C, H, W)
         """
         if state is not None:
             self.move_camera(state)
+        
+        rgb_cfg = self.rgb_cfg
+        depth_cfg = self.depth_cfg
+
+        # Get view matrix
+        init_camera_vector = (1, 0, 0)  # x-axis
+        init_up_vector = (0, 0, 1)  # z-axis
+        camera_vector = self.cam_rot_matrix.dot(init_camera_vector)
+        up_vector = self.cam_rot_matrix.dot(init_up_vector)
+        view_matrix = self._p.computeViewMatrix(
+            self.cam_pos, self.cam_pos + 0.1*camera_vector, up_vector
+        )
+
+        # Get Image
+        far = 1000.0
+        near = 0.01
+        projection_matrix = self._p.computeProjectionMatrixFOV(
+            fov=rgb_cfg.fov, aspect=rgb_cfg.aspect, nearVal=near,
+            farVal=far
+        )
+        _, _, rgb_img, depth, _ = self._p.getCameraImage(
+            rgb_cfg.img_w, rgb_cfg.img_h, view_matrix, projection_matrix,
+            flags=self._p.ER_NO_SEGMENTATION_MASK, shadow=1,
+            lightDirection=[1, 1, 1]
+        )
+        depth = np.reshape(depth, (1, depth_cfg.img_h, depth_cfg.img_w))
+        depth = far * near / (far - (far-near) * depth)
+
         if self.observation_type == 'rgb':
-            rgb_cfg = self.rgb_cfg
-            depth_cfg = self.depth_cfg
-
-            # Get view matrix
-            init_camera_vector = (1, 0, 0)  # x-axis
-            init_up_vector = (0, 0, 1)  # z-axis
-            camera_vector = self.cam_rot_matrix.dot(init_camera_vector)
-            up_vector = self.cam_rot_matrix.dot(init_up_vector)
-            view_matrix = self._p.computeViewMatrix(
-                self.cam_pos, self.cam_pos + 0.1*camera_vector, up_vector
-            )
-
-            # Get Image
-            far = 5 #1000.0
-            near = 1 #0.01
-            projection_matrix = self._p.computeProjectionMatrixFOV(
-                fov=rgb_cfg.fov, aspect=rgb_cfg.aspect, nearVal=near,
-                farVal=far
-            )
-            _, _, rgb_img, depth, _ = self._p.getCameraImage(
-                rgb_cfg.img_w, rgb_cfg.img_h, view_matrix, projection_matrix,
-                flags=self._p.ER_NO_SEGMENTATION_MASK, shadow=1,
-                lightDirection=[1, 1, 1]
-            )
-            depth = np.reshape(depth, (1, depth_cfg.img_h, depth_cfg.img_w))
-            depth = far * near / (far - (far-near) * depth)
-
-            # Convert RGB to CHW and uint8
-            # rgb = rgba2rgb(rgb_img).transpose(2, 0, 1)
-            pc = self._get_point_cloud(depth, rgb_cfg.img_w, rgb_cfg.img_h, view_matrix, projection_matrix)
-            # print("Depth map, ", pc.shape, pc)
-            # print("Height: ", rgb_cfg.img_h, " Width: ", rgb_cfg.img_w)
-            return pc.T #rgb
-
+            return self._get_rgb()
         elif self.observation_type == 'lidar':
             return self._get_lidar()
+        elif self.observation_type == 'both':
+            rgb = self._get_rgb()
+            # lidar = self._get_lidar()
+            pc = self._get_point_cloud(depth, rgb_cfg.img_w, rgb_cfg.img_h, view_matrix, projection_matrix)
+            # print("RGB shape: ", rgb.shape, " LiDAR shape: ", lidar.shape)
+            # black_rgb = np.zeros(lidar.shape) + 0.1
+            return (pc,rgb) # np.vstack((lidar, black_rgb))
 
-    def _get_point_cloud(self, depth, width, height, view_matrix, proj_matrix):
+    def _get_point_cloud(self, _, width, height, view_matrix, proj_matrix):
         # based on https://stackoverflow.com/questions/59128880/getting-world-coordinates-from-opengl-depth-buffer
 
         # get a depth image
@@ -201,6 +207,8 @@ class VanillaEnv():
                                       flags=self._p.ER_NO_SEGMENTATION_MASK, shadow=1,
                                       lightDirection=[1, 1, 1])
         depth = np.array(image_arr[3])
+        depth = median_filter(depth, 4)
+
 
         # create a 4x4 transform matrix that goes from pixel coordinates (and depth values) to world coordinates
         proj_matrix = np.asarray(proj_matrix).reshape([4, 4], order="F")
@@ -208,24 +216,61 @@ class VanillaEnv():
         tran_pix_world = np.linalg.inv(np.matmul(proj_matrix, view_matrix))
 
         # create a grid with pixel coordinates and depth values
-        # y, x = np.mgrid[-1:1:2 / height, -1:1:2 / width]
         y, x = np.mgrid[-1:1:2 / height, -1:1:2 / width]
         y *= -1.
         x, y, z = x.reshape(-1), y.reshape(-1), depth.reshape(-1)
+        # r, g, b = rgb[0].reshape(-1), rgb[1].reshape(-1), rgb[2].reshape(-1)
         h = np.ones_like(z)
 
         pixels = np.stack([x, y, z, h], axis=1)
         # filter out "infinite" depths
-        pixels = pixels[z < 0.99999]
+        # pixels[z > 0.9999] = 0 #np.inf
         pixels[:, 2] = 2 * pixels[:, 2] - 1
 
         # turn pixels to world coordinates
         points = np.matmul(tran_pix_world, pixels.T).T
         points /= points[:, 3: 4]
         points = points[:, :3]
+        points = points.reshape(height, width, 3)
 
         return points
 
+    def _get_rgb(self):
+        rgb_cfg = self.rgb_cfg
+        depth_cfg = self.depth_cfg
+
+        # Get view matrix
+        init_camera_vector = (1, 0, 0)  # x-axis
+        init_up_vector = (0, 0, 1)  # z-axis
+        camera_vector = self.cam_rot_matrix.dot(init_camera_vector)
+        up_vector = self.cam_rot_matrix.dot(init_up_vector)
+        view_matrix = self._p.computeViewMatrix(
+            self.cam_pos, self.cam_pos + 0.1*camera_vector, up_vector
+        )
+
+        # Get Image
+        far = 1000.0
+        near = 0.01
+        projection_matrix = self._p.computeProjectionMatrixFOV(
+            fov=rgb_cfg.fov, aspect=rgb_cfg.aspect, nearVal=near,
+            farVal=far
+        )
+        _, _, rgb_img, depth, _ = self._p.getCameraImage(
+            rgb_cfg.img_w, rgb_cfg.img_h, view_matrix, projection_matrix,
+            flags=self._p.ER_NO_SEGMENTATION_MASK, shadow=1,
+            lightDirection=[1, 1, 1]
+        )
+        depth = np.reshape(depth, (1, depth_cfg.img_h, depth_cfg.img_w))
+        depth = far * near / (far - (far-near) * depth)
+
+        # Convert RGB to CHW and uint8
+        rgb = rgba2rgb(rgb_img).transpose(2, 0, 1)
+        # pc = self._get_point_cloud(depth, rgb_cfg.img_w, rgb_cfg.img_h, view_matrix, projection_matrix)
+        # print("Depth map, ", pc.shape)
+        # print("RGB shape: ", rgb_img.shape, " Depth shape: ", depth.shape)
+        # print("Height: ", rgb_cfg.img_h, " Width: ", rgb_cfg.img_w)
+        return rgb #(3,H,W)
+    
     def _get_lidar(self):
         """
         Simulate LiDAR measurement at robot's current state.
@@ -270,7 +315,7 @@ class VanillaEnv():
         # # Visualize rays
         # out_num = 0
         # for ind in range(num_rays):
-        # self._p.addUserDebugLine(ray_from[ind], ray_to[ind], lineWidth=1)
+        #     self._p.addUserDebugLine(ray_from[ind], ray_to[ind], lineWidth=1)
 
         # Get point cloud
         point_cloud = []
@@ -309,10 +354,6 @@ class VanillaEnv():
         p.setGravity(0, 0, -9.8)
         if self.render:
             p.resetDebugVisualizerCamera(3.80, 225, -60, [3.5, 0.5, 0])
-        
-        p.setAdditionalSearchPath(pybullet_data.getDataPath())
-
-        
 
         # Build ground and walls
         ground_collision_id = p.createCollisionShape(
@@ -341,17 +382,17 @@ class VanillaEnv():
                 self.wall_height / 2
             ]
         )
-        # wall_back_visual_id = p.createVisualShape(
-        #     p.GEOM_BOX, rgbaColor=self.back_wall_rgba, halfExtents=[
-        #         self.wall_thickness / 2, self.room_dim / 2,
-        #         self.wall_height / 2
-        #     ]
-        # )
-        # self.wall_back_id = p.createMultiBody(
-        #     baseMass=0, baseCollisionShapeIndex=wall_collision_id,
-        #     baseVisualShapeIndex=wall_back_visual_id,
-        #     basePosition=[-self.wall_thickness / 2, 0, self.wall_height / 2]
-        # )
+        wall_back_visual_id = p.createVisualShape(
+            p.GEOM_BOX, rgbaColor=self.back_wall_rgba, halfExtents=[
+                self.wall_thickness / 2, self.room_dim / 2,
+                self.wall_height / 2
+            ]
+        )
+        self.wall_back_id = p.createMultiBody(
+            baseMass=0, baseCollisionShapeIndex=wall_collision_id,
+            baseVisualShapeIndex=wall_back_visual_id,
+            basePosition=[-self.wall_thickness / 2, 0, self.wall_height / 2]
+        )
         wall_left_visual_id = p.createVisualShape(
             p.GEOM_BOX, rgbaColor=self.left_wall_rgba, halfExtents=[
                 self.wall_thickness / 2, self.room_dim / 2,
@@ -397,35 +438,35 @@ class VanillaEnv():
                 self.wall_height / 2
             ]
         )
-        # self.wall_top_id = p.createMultiBody(
-        #     # for blocking view - same as ground
-        #     baseMass=0,
-        #     baseCollisionShapeIndex=ground_collision_id,
-        #     baseVisualShapeIndex=ground_visual_id,
-        #     basePosition=[
-        #         self.room_dim / 2, 0,
-        #         self.wall_height + self.wall_thickness / 2
-        #     ]
-        # )
+        self.wall_top_id = p.createMultiBody(
+            # for blocking view - same as ground
+            baseMass=0,
+            baseCollisionShapeIndex=ground_collision_id,
+            baseVisualShapeIndex=ground_visual_id,
+            basePosition=[
+                self.room_dim / 2, 0,
+                self.wall_height + self.wall_thickness / 2
+            ]
+        )
 
         # Build camera and LiDAR visualization if render
-        # if self.render:
-        #     camera_visual_id = p.createVisualShape(
-        #         p.GEOM_BOX, rgbaColor=[0, 0.8, 0, 1.0],
-        #         halfExtents=[0.03, 0.20, 0.05]
-        #     )
-        #     self.camera_id = p.createMultiBody(
-        #         baseMass=0, baseCollisionShapeIndex=-1,
-        #         baseVisualShapeIndex=camera_visual_id, basePosition=[0, 0, 0]
-        #     )
-        #     lidar_visual_id = p.createVisualShape(
-        #         p.GEOM_CYLINDER, rgbaColor=[0, 0.8, 0, 1.0], radius=0.08,
-        #         length=self.lidar_height
-        #     )
-        #     self.lidar_id = p.createMultiBody(
-        #         baseMass=0, baseCollisionShapeIndex=-1,
-        #         baseVisualShapeIndex=lidar_visual_id, basePosition=[0, 0, 0]
-        #     )
+        if self.render:
+            camera_visual_id = p.createVisualShape(
+                p.GEOM_BOX, rgbaColor=[0, 0.8, 0, 1.0],
+                halfExtents=[0.03, 0.20, 0.05]
+            )
+            self.camera_id = p.createMultiBody(
+                baseMass=0, baseCollisionShapeIndex=-1,
+                baseVisualShapeIndex=camera_visual_id, basePosition=[0, 0, 0]
+            )
+            lidar_visual_id = p.createVisualShape(
+                p.GEOM_CYLINDER, rgbaColor=[0, 0.8, 0, 1.0], radius=0.08,
+                length=self.lidar_height
+            )
+            self.lidar_id = p.createMultiBody(
+                baseMass=0, baseCollisionShapeIndex=-1,
+                baseVisualShapeIndex=lidar_visual_id, basePosition=[0, 0, 0]
+            )
 
         # Initialize obstacle id list - excluding walls and floors
         self._obs_id_all = []
@@ -464,8 +505,6 @@ class VanillaEnv():
         # Load furniture
         furniture_dict = task.furniture
         for key, value in furniture_dict.items():
-
-            print(value.path)
             obj_collision_id = self._p.createCollisionShape(
                 self._p.GEOM_MESH,
                 fileName=value.path,
@@ -506,7 +545,7 @@ class VanillaEnv():
         Args:
             state (np.ndarray): State to be reset.
         """
-        yaw = 0 #np.pi/2
+        yaw = 0 # face +x direction
         if "robot_id" in vars(self).keys():
             self._p.resetBasePositionAndOrientation(
                 self.robot_id,
@@ -514,19 +553,18 @@ class VanillaEnv():
                 ornObj=self._p.getQuaternionFromEuler([0, 0, yaw])
             )
         else:
-            self.robot_id = load_robot_description('go1_description')
-            # robot_visual_id = self._p.createVisualShape(
-            #     self._p.GEOM_BOX, halfExtents=self.robot_half_dim,
-            #     rgbaColor=[0.5, 0.5, 0.5, 1]
-            # )
-            # self.robot_id = self._p.createMultiBody(
-            #     baseMass=0,  # static
-            #     baseVisualShapeIndex=robot_visual_id,
-            #     basePosition=np.append(state[:2], self.robot_com_height),
-            #     baseOrientation=self._p.getQuaternionFromEuler([
-            #         0, 0, yaw
-            #     ])
-            # )
+            robot_visual_id = self._p.createVisualShape(
+                self._p.GEOM_BOX, halfExtents=self.robot_half_dim,
+                rgbaColor=[0.5, 0.5, 0.5, 1]
+            )
+            self.robot_id = self._p.createMultiBody(
+                baseMass=0,  # static
+                baseVisualShapeIndex=robot_visual_id,
+                basePosition=np.append(yaw, self.robot_com_height),
+                baseOrientation=self._p.getQuaternionFromEuler([
+                    0, 0, yaw
+                ])
+            )
 
     def move_robot(self, action, state):
         """
@@ -544,11 +582,10 @@ class VanillaEnv():
         y_new = y + vy * self.dt
         vx_new = vx-k1*self.dt*vx+k5*ux*self.dt -k4*vy*self.dt
         vy_new = vy-k2*self.dt*vy+k6*uy*self.dt -k3*vx*self.dt
-        # print(vx_new, vy_new)
         # state = np.array([x_new, y_new, vx_new, vy_new])
-        state = np.array([ux,uy,0,0])
-        yaw = 0#  np.pi/2
+        state = np.array([ux, uy, 0, 0]) # for calibration
 
+        yaw = 0
         # Update visual
         self._p.resetBasePositionAndOrientation(
             self.robot_id, posObj=np.append(state[:2], self.robot_com_height),
@@ -566,36 +603,16 @@ class VanillaEnv():
             state (np.ndarray): State of the robot.
         """
         x, y, vx, vy = state
-        yaw = 0 #np.pi/2 # face +y direction
+        yaw = 0 # face +y direction
         robot_top_height = self.robot_half_dim[2] * 2
 
         # camera
+        # these are from task
         rgb_height = robot_top_height + self.rgb_cfg.z_offset_from_robot_top
-        rgb_x_body_center = self.robot_half_dim[
-            0
-        ] + self.rgb_cfg.x_offset_from_robot_front + self.camera_thickness / 2
-        rgb_x_body_front = self.robot_half_dim[
-            0] + self.rgb_cfg.x_offset_from_robot_front + self.camera_thickness
+        rgb_x_body_center = self.robot_half_dim[0] + self.rgb_cfg.x_offset_from_robot_front + self.camera_thickness / 2
+        rgb_x_body_front = self.robot_half_dim[0] + self.rgb_cfg.x_offset_from_robot_front + self.camera_thickness
         camera_roll_noise = 0
         camera_yaw_noise = 0
-        # if self.camera_tilt_range is not None:
-        #     camera_tilt = np.random.uniform(
-        #         self.camera_tilt_range[0], self.camera_tilt_range[1], 1
-        #     )[0]
-        # else:
-        #     camera_tilt = self.camera_tilt
-        #     if self.camera_tilt_noise_std > 0:  # in deg
-        #         camera_tilt += np.random.normal(
-        #             0, self.camera_tilt_noise_std, 1
-        #         )[0]
-        # if self.camera_roll_noise_std > 0:  # in deg
-        #     camera_roll_noise = np.random.normal(
-        #         0, self.camera_roll_noise_std, 1
-        #     )[0]
-        # if self.camera_yaw_noise_std > 0:  # in deg
-        #     camera_yaw_noise = np.random.normal(
-        #         0, self.camera_yaw_noise_std, 1
-        #     )[0]
         rot_matrix = [
             camera_roll_noise / 180 * np.pi, self.rgb_cfg.tilt / 180 * np.pi,
             yaw + camera_yaw_noise / 180 * np.pi
@@ -604,7 +621,7 @@ class VanillaEnv():
             self._p.getQuaternionFromEuler(rot_matrix)
         )
         self.cam_rot_matrix = np.array(rot_matrix).reshape(3, 3)
-        self.cam_pos_center = np.array([x, y, rgb_height]
+        self.cam_pos_center = np.array([x, y, rgb_height] #x,y,z
                                       ) + self.cam_rot_matrix.dot(
                                           (rgb_x_body_center, 0, 0)
                                       )  # for visualization
@@ -619,15 +636,15 @@ class VanillaEnv():
         ])
 
         # Update visuals
-        # if self.render:
-        #     self._p.resetBasePositionAndOrientation(
-        #         self.camera_id, posObj=self.cam_pos_center,
-        #         ornObj=self._p.getQuaternionFromEuler([0, 0, yaw])
-        #     )
-        #     self._p.resetBasePositionAndOrientation(
-        #         self.lidar_id, posObj=self.lidar_pos,
-        #         ornObj=self._p.getQuaternionFromEuler([0, 0, 0])
-        #     )
+        if self.render:
+            self._p.resetBasePositionAndOrientation(
+                self.camera_id, posObj=self.cam_pos_center,
+                ornObj=self._p.getQuaternionFromEuler([0, 0, yaw])
+            )
+            self._p.resetBasePositionAndOrientation(
+                self.lidar_id, posObj=self.lidar_pos,
+                ornObj=self._p.getQuaternionFromEuler([0, 0, 0])
+            )
 
     def seed(self, seed=0):
         """

@@ -545,8 +545,8 @@ class VanillaEnv():
         vx_new = vx-k1*self.dt*vx+k5*ux*self.dt -k4*vy*self.dt
         vy_new = vy-k2*self.dt*vy+k6*uy*self.dt -k3*vx*self.dt
         # print(vx_new, vy_new)
-        # state = np.array([x_new, y_new, vx_new, vy_new])
-        state = np.array([ux,uy,0,0])
+        state = np.array([x_new, y_new, vx_new, vy_new])
+        # state = np.array([ux,uy,0,0])
         yaw = 0#  np.pi/2
 
         # Update visual

@@ -84,10 +84,10 @@ def process_mesh(category_all, task_id, args):
         [0, 0, 1, room_height / 2],
         [0, 0, 0, 1],
     ]
-    # front_wall = trimesh.creation.box(
-    #     [0.1, args.room_dim + 0.2, room_height + 0.2],
-    #     front_wall_transform_matrix,
-    # )
+    front_wall = trimesh.creation.box(
+        [0.1, args.room_dim + 0.2, room_height + 0.2],
+        front_wall_transform_matrix,
+    )
     back_wall_transform_matrix = [
         [1, 0, 0, -0.05],
         [0, 1, 0, 0],
@@ -112,7 +112,7 @@ def process_mesh(category_all, task_id, args):
         floor,
         left_wall,
         right_wall,
-        # front_wall,
+        front_wall,
         back_wall,
     ])
     # room.show()
@@ -123,7 +123,8 @@ def process_mesh(category_all, task_id, args):
     piece_saved_bounds = []
     piece_id_all = []
     piece_pos_all = []
-    num_furniture = np.random.randint(args.num_furniture_per_room)+1
+    # num_furniture = np.random.randint(args.num_furniture_per_room)+1
+    num_furniture = 5
     num_occlude = int(np.floor(num_furniture/2))
     while num_furniture_saved < num_furniture:
         category_chosen = random.choice(list(category_all.keys()))
@@ -216,9 +217,17 @@ def process_mesh(category_all, task_id, args):
 
         # Quit
         if obs_attempt == max_obs_attempt:
+            print('obs_attempt == max_obs_attempt')
             return 0
 
+        alpha = random.uniform(0, 2 * np.pi)
         # desk_height = desk.bounds[1, 1] - desk.bounds[1, 0]
+        # piece.apply_transform([
+        #     [np.cos(alpha), -np.sin(alpha), 0, x_pos],
+        #     [np.sin(alpha), np.cos(alpha), 0, y_pos],
+        #     [0, 0, 1, 0],
+        #     [0, 0, 0, 1],
+        # ]) # add rotation
         piece.apply_transform([[1, 0, 0, x_pos], [0, 1, 0, y_pos],
                                [0, 0, 1, 0], [0, 0, 0, 1]])
         piece_bounds = piece.bounds  # update after transform before being saved
@@ -238,14 +247,15 @@ def process_mesh(category_all, task_id, args):
         room_mesh = slice_mesh(room)  # only remove floor
         room_voxels = room_mesh.voxelized(pitch=grid_pitch)
     except:
+        print('voxelization failed')
         return 0
     room_voxels_2d = np.max(room_voxels.matrix, axis=2)
     room_voxels_2d[1, :] = 1  # fill in gaps in wall
-    # room_voxels_2d[-2, :] = 1
+    room_voxels_2d[-2, :] = 1
     room_voxels_2d[:, 1] = 1
     room_voxels_2d[:, -2] = 1
     # room_voxels.show()
-    # plt.show()
+    plt.show()
 
     # Sample init and goal
     init_goal_attempt = -1
@@ -285,9 +295,9 @@ def process_mesh(category_all, task_id, args):
         #     print('Not enough obstacle')
         #     continue
         # break
-    if init_goal_attempt == max_init_goal_attempt:
-        # print('no init/goal found')
-        return 0
+    # if init_goal_attempt == max_init_goal_attempt:
+    #     print('no init/goal found')
+    #     return 0
     
 
     ############################################################
@@ -333,7 +343,7 @@ def process_mesh(category_all, task_id, args):
     # Export wall meshes - do not use texture for now since we do not use RGB for training
     wall_path = os.path.join(save_path, 'wall.obj')
     wall = trimesh.util.concatenate([
-        ceiling, left_wall, right_wall, back_wall , #front_wall
+        ceiling, left_wall, right_wall, back_wall , front_wall
     ])
     wall.export(wall_path)
     floor_path = os.path.join(save_path, 'floor.obj')
@@ -393,11 +403,11 @@ if __name__ == "__main__":
         help='number of cpu threads to use',
     )
     parser.add_argument(
-        '--save_task_folder', default='/home/allen/data/pac-perception/room/',
+        '--save_task_folder', default='/home/zm2074/Projects/data/perception-guarantees/room_0805/',
         nargs='?', help='path to save the task files'
     )
     parser.add_argument(
-        '--mesh_folder', default='/home/temp/3d-front/3D-FUTURE-model-tiny',
+        '--mesh_folder', default='/home/zm2074/Projects/data/perception-guarantees/3D-FUTURE-model-tiny',
         nargs='?', help='path to 3D FUTURE dataset'
     )
     # parser.add_argument(
@@ -466,3 +476,8 @@ if __name__ == "__main__":
             task_id=num_processed,
             args=args,
         )
+    # process_mesh(
+    #     category_all,
+    #     task_id=0,
+    #     args=args,
+    # )

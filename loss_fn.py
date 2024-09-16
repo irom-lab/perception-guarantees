@@ -310,3 +310,25 @@ def scale_prediction_average(
 #     bboxes2 = torch.cat((bbox2, bbox1), 0)
 #     box_loss_tensor(bboxes1, bboxes2, 1, 1, 1)
 
+def expand_pc(pred: np.ndarray, 
+              gt: np.ndarray,
+              loss_mask: np.ndarray):
+    loss = 0
+    while loss <= 41:
+        loss += 1
+        # add a pixel around every occupied cell in pred
+        pred_pad = pred.copy()
+
+        for i in range(pred.shape[0]):
+            for j in range(pred.shape[1]):
+                if pred[i, j] == 1:
+                    left = max(0, i-loss)
+                    right = min(pred.shape[0], i+loss+1)
+                    top = max(0, j-loss)
+                    bottom = min(pred.shape[1], j+loss+1)
+                    pred_pad[left:right, top:bottom] = 1
+
+        # check if pred_pad is a superset of gt
+        coverage = pred_pad + loss_mask - gt
+        if np.all(coverage >= 0):
+            return loss

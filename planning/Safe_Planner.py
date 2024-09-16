@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
 import pickle
+import time as tm
 
 from shapely.geometry import Point, MultiPolygon, Polygon, LineString, MultiPoint
 from shapely.ops import unary_union
@@ -87,9 +88,13 @@ class World:
         for geom in self.box_space.geoms:
             xs, ys = geom.exterior.xy
             ax.fill(xs,ys, edgecolor = dark_orange, linestyle = '--', fc=orange)
-        if self.free_space is not None:
+        if self.free_space is not None and self.free_space.geom_type == 'Polygon':
             xs, ys = self.free_space.exterior.xy
             ax.fill(xs,ys, edgecolor = 'k',fc=blue)
+        elif self.free_space is not None and self.free_space.geom_type == 'MultiPolygon':
+            for geom in self.free_space.geoms:
+                xs, ys = geom.exterior.xy
+                ax.fill(xs,ys, edgecolor = 'k',fc=blue)
         if true_boxes is not None:
             for box in true_boxes:
                 ax.add_patch(Rectangle((box[0,0],box[0,1]),box[1,0]-box[0,0],box[1,1]-box[0,1],edgecolor = 'k',linewidth = 2, fc='k'))
@@ -169,9 +174,12 @@ class Safe_Planner:
 
         # sample nodes on grid
         self.Pset = []
-        for i in np.linspace(0.5,self.world.w-0.5,20):
-            for j in np.linspace(0.5,self.world.h-0.5,20):
-                for k in np.linspace(min(self.vx_range),max(self.vx_range),5):
+        num_speed = 5
+        num_horizontal = int(np.ceil(np.sqrt(self.n_samples/num_speed)))
+        num_vertical = int(np.ceil((self.n_samples/num_speed)/num_horizontal))
+        for i in np.linspace(0.5,self.world.w-0.5,num_horizontal):
+            for j in np.linspace(0.5,self.world.h-0.5,num_vertical):
+                for k in np.linspace(min(self.vx_range),max(self.vx_range),num_speed):
                     self.Pset.append([i,j,k,0.5]) # constant forward speed
         self.n_samples = len(self.Pset)
         self.Pset.append(self.goal)
@@ -193,6 +201,7 @@ class Safe_Planner:
         '''Load pre-computed reachable sets'''
         self.Pset = Pset
         self.reachable = reachable
+        self.point_objects = MultiPoint(np.array(self.Pset)[:,0:2])
 
     def goal_inter(self, start_idx):
         '''Returns best intermediate goal to explore'''
@@ -207,8 +216,12 @@ class Safe_Planner:
         else:
             candidates = []
             for geom in self.world.free_space.geoms:
-                candidates += [np.array(geom.exterior.interpolate(t).xy).reshape(2) for t in
-                               np.linspace(0,geom.length,
+                if geom.geom_type == 'LineString':
+                    # self.world.free_space.delete(geom)
+                    continue
+                else:
+                    candidates += [np.array(geom.exterior.interpolate(t).xy).reshape(2) for t in
+                                   np.linspace(0,geom.length,
                                            int(np.floor(geom.length/self.radius)),False)]
         
         candidates = np.array(candidates)
@@ -281,7 +294,7 @@ class Safe_Planner:
                 if world_intersection.geom_type == 'Point':
                     world_intersects.append(world_intersection)
                 elif world_intersection.geom_type == 'MultiPoint':
-                    world_intersects.append(world_intersection[0])
+                    world_intersects.append(world_intersection.geoms[0])
                 vertices.append(pt)
             if (world_intersects[0].x != world_intersects[1].x and
                 world_intersects[0].y != world_intersects[1].y):
@@ -299,11 +312,15 @@ class Safe_Planner:
         ray_left = LineString([start[0:2],start[0:2]+12*np.array([np.cos(np.pi/2+self.FoV/2),np.sin(np.pi/2+self.FoV/2)])])
         ray_right = LineString([start[0:2],start[0:2]+12*np.array([np.cos(np.pi/2-self.FoV/2),np.sin(np.pi/2-self.FoV/2)])])
         world_intersect_left = ray_left.intersection(world)
+        if world_intersect_left.geom_type == 'MultiPoint':
+            world_intersect_left = world_intersect_left.geoms[0]
         fov_v = [Point(start[0:2]),world_intersect_left]
         if world_intersect_left.x != 0:
             fov_v.append(Point([0,8]))
         fov_v += [Point([0,0]),Point([8,0])]
         world_intersect_right = ray_right.intersection(world)
+        if world_intersect_right.geom_type == 'MultiPoint':
+            world_intersect_right = world_intersect_right.geoms[0]
         if world_intersect_right.x != 8:
             fov_v.append(Point([8,8]))
         fov_v += [world_intersect_right, Point(start[0:2])]
@@ -372,8 +389,8 @@ class Safe_Planner:
         self.itr = 0
 
         # check collision
-        point_objects = MultiPoint(np.array(self.Pset)[:,0:2])
-        self.bool_valid = self.world.free_space.contains(point_objects.geoms)
+        # point_objects = MultiPoint(np.array(self.Pset)[:,0:2])
+        self.bool_valid = self.world.free_space.contains(self.point_objects.geoms)
 
         # find nearest valid sampled node to current state
         start_idx_all = np.argsort(cdist(np.array(self.Pset),np.array(state)), axis=0)
@@ -477,19 +494,35 @@ class Safe_Planner:
             idx_parent = idxset_cand[idx_incand_costmin]
             idx_nearinparentfset = self.reachable[idx_parent][1][0].index(idx_near)
             x_waypoints = self.reachable[idx_parent][1][3][idx_nearinparentfset][0]
+            # # select midpoint from trajectory
+            # x_waypoints = np.array([x_waypoints[0],x_waypoints[int(np.floor(len(x_waypoints)/2))],x_waypoints[-1]])
+            # # check trajectory is collision-free
+            # if self.world.isValid_multiple(x_waypoints):
+            #     # check ICS before sensor update
+            #     if self.time_to_come[idx_parent] + time_new <= self.sensor_dt:
+            #         connect = True
+            #         for x_waypoint in x_waypoints[0:int(np.floor(self.sensor_dt/self.dt))]:
+            #             if not self.world.isICSfree(x_waypoint):
+            #                 connect = False
+            #         if connect:
+            #             self.connect(idx_near,cost_new,time_new,idx_parent)
+            #     elif self.time_to_come[idx_parent] + time_new > self.sensor_dt:
+            #         self.connect(idx_near,cost_new,time_new,idx_parent)
+            connect = True
+            # if not self.world.isValid(x_waypoints[0]) or not self.world.isValid(x_waypoints[-1]):
+            #     connect = False
+            if self.bool_valid[idx_near] == False or self.bool_valid[idx_parent] == False:
+                connect = False
+            elif not self.world.isValid_multiple(x_waypoints):
+                connect = False
+            elif self.time_to_come[idx_parent] + time_new <= self.sensor_dt:
+                for x_waypoint in x_waypoints[0:int(np.floor(self.sensor_dt/self.dt))]:
+                    if not self.world.isICSfree(x_waypoint):
+                        connect = False
+                        break
             
-            # check trajectory is collision-free
-            if self.world.isValid_multiple(x_waypoints):
-                # check ICS before sensor update
-                if self.time_to_come[idx_parent] + time_new <= self.sensor_dt:
-                    connect = True
-                    for x_waypoint in x_waypoints[0:int(np.floor(self.sensor_dt/self.dt))]:
-                        if not self.world.isICSfree(x_waypoint):
-                            connect = False
-                    if connect:
-                        self.connect(idx_near,cost_new,time_new,idx_parent)
-                elif self.time_to_come[idx_parent] + time_new > self.sensor_dt:
-                    self.connect(idx_near,cost_new,time_new,idx_parent)
+            if connect:
+                self.connect(idx_near,cost_new,time_new,idx_parent)
 
     def connect(self,idx_near, cost_new, time_new, idx_parent):
         '''Connects nodes in FMT*'''

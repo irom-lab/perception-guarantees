@@ -34,7 +34,7 @@ def main(task):
     for step in range(100):
 
         # Execute action
-        action = [0.1, 0.1, 0.01]
+        action = [0.1, 0.1]
         observation, reward, done, info = env.step(action)
 
         # summarize the step in one line
@@ -71,7 +71,7 @@ if __name__ == '__main__':
 
     # Initialize task
     task = OmegaConf.create()
-    task.init_state = [1, 0.0, 0.0]  # x, y, yaw
+    task.init_state = [1,0, 0.0, 0.0]  # x, y, yaw
     task.goal_loc = [7, 1.0]
     task.goal_radius = 0.5
     #
