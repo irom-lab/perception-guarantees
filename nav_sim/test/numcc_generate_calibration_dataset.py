@@ -1,3 +1,4 @@
+# %%
 import os
 import torch
 import argparse
@@ -10,6 +11,7 @@ from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 import plotly.express as px
 import time
+import gc
 
 # Sim imports
 from nav_sim.env.task_env_numcc import TaskEnv
@@ -26,6 +28,10 @@ from numcc.src.model.nu_mcc import NUMCC
 import timm.optim.optim_factory as optim_factory
 from numcc.util.misc import NativeScalerWithGradNormCount as NativeScaler
 
+from pathlib import Path
+
+from torch.profiler import profile, record_function, ProfilerActivity
+
 # Add utils to path
 import sys
 sys.path.append('../utils')
@@ -39,8 +45,11 @@ except RuntimeError:
 torch.cuda.empty_cache() 
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:512"
 
+# base path
+base_path: Path = Path(__file__).parent.parent.parent
+
 ########## Load the x,y points to sample
-with open('planning/pre_compute/Pset-1.5k.pkl', 'rb') as f:
+with open(f'{base_path}/planning/pre_compute/Pset-1.5k.pkl', 'rb') as f:
     state_samples = pickle.load(f)
     # Remove goal
     state_samples = state_samples[:-1][:]
@@ -65,14 +74,19 @@ numcc_args.run_vis = True
 numcc_args.n_groups = 550
 numcc_args.blr = 5e-5
 numcc_args.save_pc = True
+numcc_args.device = torch.device('cuda')
 
 ######## LOAD NUMCC MODEL ############
 misc.init_distributed_mode(numcc_args)
 
 model = NUMCC(args=numcc_args)
-model = model.to(numcc_args.device)
-model_without_ddp = model
+model = model.to(torch.device('cuda'))
 
+# set the model to eval mode
+model.eval()
+
+model_without_ddp = model
+# %%
 # following timm: set wd as 0 for bias and norm layers
 param_groups = optim_factory.param_groups_weight_decay(model_without_ddp, numcc_args.weight_decay)
 optimizer = torch.optim.AdamW(param_groups, lr=numcc_args.blr, betas=(0.9, 0.95))
@@ -87,7 +101,13 @@ def dumb_func(task):
     # print("Dumb func")
     return {'delta': 0}
 
-def run_env(task, visualize=False):
+def run_env(args):
+    # unpack the arguments
+    # task = args['task']
+    # visualize = args['visualize'] if 'visualize' in args else False,
+    # device: torch.device = args['device'] if device in args else torch.device('cuda')
+    task, visualize, device = args
+
     task = initialize_task(task)
     env = TaskEnv(render=False)
     env.reset(task)
@@ -103,8 +123,9 @@ def run_env(task, visualize=False):
     loss_env = []
 
     for step in range(num_steps):
+    # for step in range(3):
         # run step
-        task, grid, loss_mask_ = run_step(env, task, x, y, step)
+        task, grid, loss_mask_ = run_step(env, task, x, y, step, device=device)
 
         if visualize:
             fig = make_subplots(rows=1, cols=2, subplot_titles=("Predicted Grid", "Loss Masked Ground Truth"))
@@ -120,6 +141,12 @@ def run_env(task, visualize=False):
 
     env.close_pb()
     delta = np.max(np.array(loss_env))
+
+    # clear memory
+    del env, task
+    torch.cuda.empty_cache()
+    gc.collect()
+
     # return delta
     return {'pred_grid': pred_grid_env, 
             'delta': delta,
@@ -159,7 +186,8 @@ def initialize_task(task):
     
     return task
 
-def run_step(env, task, x, y, step):
+def run_step(env, task, x, y, step,
+             device: torch.device = torch.device('cuda')):
     if step%50 == 0:
         print("Step", step)
 
@@ -198,10 +226,9 @@ def run_step(env, task, x, y, step):
         gt_data,
     ]
 
-    
-
     ######## RUN INFERENCE ############
-    pred_xyz, seen_xyz = run_viz_udf(model, samples, numcc_args.device, numcc_args)
+    # pred_xyz, seen_xyz = run_viz_udf(model, samples, numcc_args.device, numcc_args)
+    pred_xyz, seen_xyz = run_viz_udf(model, samples, device, numcc_args)
     cam_position_numcc = np.array([-cam_position[1], -cam_position[2], cam_position[0]])
     # print("Cam position numcc", cam_position_numcc)
     pred_points = pred_xyz + cam_position_numcc # back to sim frame
@@ -315,6 +342,8 @@ def expand_pc(pred: np.ndarray,
 
 def run_viz_udf(model, samples, device, args):
     model.eval()
+    model = model.to(device)
+
     t1 = time.time()
     seen_xyz, valid_seen_xyz, query_xyz, unseen_rgb, labels, seen_images, gt_fps_xyz, seen_xyz_hr, valid_seen_xyz_hr = prepare_data_udf(samples, device, is_train=False, is_viz=True, args=args)
 
@@ -374,6 +403,9 @@ def run_viz_udf(model, samples, device, args):
         p_start = p_idx     * max_n_queries_fwd
         p_end = (p_idx + 1) * max_n_queries_fwd
         cur_query_xyz = query_xyz[:, p_start:p_end]
+        # cur_query_xyz = cur_query_xyz.half()
+
+        # model = model.half()
 
         with torch.no_grad():
             if args.hr != 1:
@@ -382,6 +414,9 @@ def run_viz_udf(model, samples, device, args):
             else:
                 seen_points = seen_xyz_hr
                 valid_seen = valid_seen_xyz_hr
+
+            # valid_seen = valid_seen.half()
+            # seen_points = seen_points.half()
 
             if args.distributed:
                 pred = model.module.decoderl2(cur_query_xyz, seen_points, valid_seen, fea, up_grid_fea, custom_centers = None)
@@ -394,13 +429,15 @@ def run_viz_udf(model, samples, device, args):
         pred_udf = F.relu(pred[:,:,:1]).reshape((-1, 1)) # nQ, 1
         pred_udf = torch.clamp(pred_udf, max=max_dist) 
 
-        
-
         # Candidate points
         t = args.udf_threshold
         pos = (pred_udf < t).squeeze(-1) # (nQ, )
         points = cur_query_xyz.squeeze(0) # (nQ, 3)
         points = points[pos].unsqueeze(0) # (1, n, 3)
+            
+        del pred
+        torch.cuda.empty_cache()
+        gc.collect()
 
         # print(pos)
 
@@ -411,9 +448,11 @@ def run_viz_udf(model, samples, device, args):
             with torch.no_grad():
                 if args.distributed:
                     pred = model.module.decoderl2(points, seen_points, valid_seen, fea, up_grid_fea)
+                    # pred = model.module.decoderl2(points, seen_points, valid_seen, fea, up_grid_fea).half()
                     pred = model.module.fc_out(pred)
                 else:
                     pred = model.decoderl2(points, seen_points, valid_seen, fea, up_grid_fea)
+                    # pred = model.decoderl2(points, seen_points, valid_seen, fea, up_grid_fea).half()
                     pred = model.fc_out(pred)
 
             cur_color_out = pred[:,:,1:].reshape((-1, 3, 256)).max(dim=2)[1] / 255.0
@@ -423,8 +462,11 @@ def run_viz_udf(model, samples, device, args):
             pts = points.detach().squeeze(0).cpu().numpy()
             pred_points = np.append(pred_points, pts, axis = 0)
             pred_colors = np.append(pred_colors, cur_color_out, axis = 0)
-        # print(f'time for pass {p_idx} : {time.time() - t0}')
-    
+        
+            del pred
+            torch.cuda.empty_cache()
+            gc.collect()
+        
     return pred_points, seen_xyz
 
 
@@ -441,7 +483,7 @@ if __name__ == '__main__':
     )
 
     parser.add_argument(
-        '--num_parallel', default=5,
+        '--num_parallel', default=30,
         nargs='?', help='number of parallel processes'
     )
 
@@ -463,7 +505,7 @@ if __name__ == '__main__':
    
 
     ##################################################################
-    env = 0
+    env = 40
     batch_size = int(args.num_parallel)
     ##################################################################
 
@@ -472,13 +514,41 @@ if __name__ == '__main__':
         # print("Environment", str(env))
         # results = run_env(task, visualize=False)
         # print("Results", results)
+
+        # TODO:
+        # with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
+        #     with record_function("model_inference"):
+                    ###
+
+        # selected device
+        sel_device = [torch.device('cuda')]* batch_size
+
+        # set the device to the GPU for the first two processes
+        # doesn't work if both GPU and CPU are used.
+        # if batch_size >= 2:
+        #     sel_device[:2] = [torch.device('cuda')] * 2
+        # else:
+        #     sel_device[:1] = [torch.device('cuda')]
+
         if env%batch_size == 0:
             if env>0: # In case code stops running, change starting environment to last batch saved
                 batch = np.floor(env/batch_size)
                 print("Saving batch", str(batch))
                 t_start = time.time()
                 pool = Pool(batch_size) # Number of parallel processes
-                results = pool.map_async(run_env, task_dataset[env-batch_size:env]) # Compute results
+                # renv_inputs = {
+                #     'task': task_dataset[env-batch_size:env],
+                #     'visualize':  False, 
+                #     'device': sel_device
+                # }
+                renv_inputs = [
+                    (task_dataset[env-batch_size + idx],
+                    False, 
+                    sel_device[idx]
+                    )
+                    for idx in range(batch_size)
+                ]
+                results = pool.map_async(run_env, renv_inputs) # Compute results
                 # results = pool.map_async(dumb_func, task_dataset[env-batch_size:env]) # Compute results
                 pool.close()
                 pool.join()
@@ -491,4 +561,4 @@ if __name__ == '__main__':
             pickle.dump(results, open(args.save_dataset + "data/dataset_intermediate/"+str(env)+".pkl", "wb"))
     # ################################################################
     # results = run_env(task_dataset[0], visualize=False)
-        # pickle.dump(results, open(args.save_dataset + "data/dataset_intermediate/"+str(env)+".pkl", "wb"))
+    # pickle.dump(results, open(args.save_dataset + "data/dataset_intermediate/"+str(env)+".pkl", "wb"))

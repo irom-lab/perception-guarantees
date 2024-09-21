@@ -12,6 +12,7 @@ import time as tm
 from shapely.geometry import Point, MultiPolygon, Polygon, LineString, MultiPoint
 from shapely.ops import unary_union
 from shapely.geometry.polygon import orient
+from shapely import contains_xy
 from planning.utils import turn_box, non_det_filter, filter_reachable
 
 # load model parameters
@@ -57,11 +58,11 @@ class World:
 
     def isValid(self, state):
         '''Collision check'''
-        return self.free_space.buffer(1e-5).contains(Point(state[0],state[1]))
+        return contains_xy(self.free_space.buffer(1e-5), x=[state[0]], y=[state[1]])
 
     def isValid_multiple(self, states):
         '''Check collision for multiple points'''
-        return self.free_space.buffer(1e-5).contains(MultiPoint(states[:,0:2]))
+        return np.all(contains_xy(self.free_space.buffer(1e-5), x=states[:,0:1], y=states[:,1:2]))
 
     def isICSfree(self, state):
         '''Check for inevitable collision set'''
@@ -201,7 +202,7 @@ class Safe_Planner:
         '''Load pre-computed reachable sets'''
         self.Pset = Pset
         self.reachable = reachable
-        self.point_objects = MultiPoint(np.array(self.Pset)[:,0:2])
+        # self.point_objects = MultiPoint(np.array(self.Pset)[:,0:2])
 
     def goal_inter(self, start_idx):
         '''Returns best intermediate goal to explore'''
@@ -368,8 +369,8 @@ class Safe_Planner:
                                   [self.world_box[0,0],self.world_box[1,1]],
                                   [self.world_box[0,0],sense_range]])
         
-        if self.world.occ_space.contains(Point(state[0,0],state[0,1])) == False: # currently in free space
-            self.world.free_space_new = self.occlusion(state[0])
+        if contains_xy(self.world.free_space, x=[state[0,0]], y=[state[0,1]]): # currently in free space
+            self.world.free_space_new = self.occlusion(state[0,:])
             if self.world.free_space_new is not None:
                 self.world.free_space_new = self.world.free_space_new.difference(tooclose)
                 self.world.free_space_new = self.world.free_space_new.difference(toofar)
@@ -389,8 +390,7 @@ class Safe_Planner:
         self.itr = 0
 
         # check collision
-        # point_objects = MultiPoint(np.array(self.Pset)[:,0:2])
-        self.bool_valid = self.world.free_space.contains(self.point_objects.geoms)
+        self.bool_valid = contains_xy(self.world.free_space, x=np.array(self.Pset)[:,0:1], y=np.array(self.Pset)[:,1:2]).flatten()
 
         # find nearest valid sampled node to current state
         start_idx_all = np.argsort(cdist(np.array(self.Pset),np.array(state)), axis=0)
@@ -494,23 +494,7 @@ class Safe_Planner:
             idx_parent = idxset_cand[idx_incand_costmin]
             idx_nearinparentfset = self.reachable[idx_parent][1][0].index(idx_near)
             x_waypoints = self.reachable[idx_parent][1][3][idx_nearinparentfset][0]
-            # # select midpoint from trajectory
-            # x_waypoints = np.array([x_waypoints[0],x_waypoints[int(np.floor(len(x_waypoints)/2))],x_waypoints[-1]])
-            # # check trajectory is collision-free
-            # if self.world.isValid_multiple(x_waypoints):
-            #     # check ICS before sensor update
-            #     if self.time_to_come[idx_parent] + time_new <= self.sensor_dt:
-            #         connect = True
-            #         for x_waypoint in x_waypoints[0:int(np.floor(self.sensor_dt/self.dt))]:
-            #             if not self.world.isICSfree(x_waypoint):
-            #                 connect = False
-            #         if connect:
-            #             self.connect(idx_near,cost_new,time_new,idx_parent)
-            #     elif self.time_to_come[idx_parent] + time_new > self.sensor_dt:
-            #         self.connect(idx_near,cost_new,time_new,idx_parent)
             connect = True
-            # if not self.world.isValid(x_waypoints[0]) or not self.world.isValid(x_waypoints[-1]):
-            #     connect = False
             if self.bool_valid[idx_near] == False or self.bool_valid[idx_parent] == False:
                 connect = False
             elif not self.world.isValid_multiple(x_waypoints):

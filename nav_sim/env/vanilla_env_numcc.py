@@ -13,11 +13,15 @@ from pybullet_utils import bullet_client as bc
 import pickle
 import plotly.express as px
 from scipy.ndimage import median_filter
+from pathlib import Path
 
 
 from nav_sim.util.misc import rgba2rgb
 
-[k1, k2, A, B, R, BRB] = pickle.load(open('planning/sp_var.pkl','rb'))
+# base path
+base_path: Path = Path(__file__).parent.parent.parent
+
+[k1, k2, A, B, R, BRB] = pickle.load(open(f'{base_path}/planning/sp_var.pkl','rb'))
 k3 = A[2,3]
 k4 = A[3,2]
 k5 = B[3,1]

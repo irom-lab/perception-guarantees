@@ -6,6 +6,8 @@ from scipy.spatial import cKDTree
 from pqdict import pqdict
 from scipy.spatial.distance import cdist
 from scipy.linalg import expm
+from scipy.stats import rankdata
+from scipy.ndimage import median_filter
 
 import pickle
 
@@ -34,6 +36,21 @@ class World():
         self.path_resolution = path_resolution
         self.rr = rr
     
+    def update(self, new_map: np.ndarray) -> 'World':
+        """
+        Update world with new map
+
+        Args:
+            new_map (np.ndarray): New map
+
+        Returns:
+            World: Updated world
+        """
+        
+        # take intersection of occupied cells
+        self.map_design = np.logical_and(self.map_design, new_map)
+
+        return self
 
     def occlusion(self, state: tuple) -> 'World':
         def bresenham_line(x0, y0, x1, y1):
@@ -62,7 +79,7 @@ class World():
         def compute_occlusion(grid, observer_pos, sensor_range):
             visible_cells = set()
             x0, y0 = observer_pos
-            for angle in range(-self.fov,self.fov):  # Cast rays inside fov
+            for angle in np.arange(-self.fov,self.fov):  # Cast rays inside fov
                 x1 = x0 - int(sensor_range * np.cos(angle*np.pi/180))
                 y1 = y0 + int(sensor_range * np.sin(angle*np.pi/180))
                 ray_cells = bresenham_line(x0, y0, x1, y1)
@@ -81,6 +98,8 @@ class World():
         for (x,y) in visible_cells:
             pred_occ[x][y] = 0.5
         
+        pred_occ = median_filter(pred_occ, size=2) # apply filter to cover random holes
+
         self.map_design = pred_occ
         # construct obstacle tree
         obstacles = np.argwhere(pred_occ != 0.5)
@@ -106,6 +125,26 @@ class World():
         pix_loc = np.array([x, y])
 
         return pix_loc
+    
+    def pixel_to_state(self, pixel: np.ndarray) -> np.ndarray:
+        """
+        Convert pixel location to planner state
+
+        Args:
+            pixel (np.ndarray): Pixel location
+
+        Returns:
+            np.ndarray: State
+        """
+        x = pixel[0]
+        y = pixel[1]
+        room_size = 8
+
+        forward = (self.map_size[0]-x)/self.map_size[0]*room_size
+        right = y/self.map_size[1]*room_size
+        state = np.array([right, forward])
+
+        return state
 
     def check_collision(self, src: np.ndarray, dst: np.ndarray) -> bool:
         """
@@ -170,7 +209,7 @@ class World():
 class FMTPlanner():
     def __init__(
         self,
-        map_design: np.ndarray,
+        # map_design: np.ndarray,
         init_state: list = [3,0.5,0,0],
         n_samples: int = 1000,
         r_n: float = 20.0,
@@ -210,7 +249,7 @@ class FMTPlanner():
         # construct obstacle tree
         # obstacles = np.argwhere(map_design == 1)
         # self.obstacles_tree = cKDTree(obstacles)
-        self.world = World(map_design)
+        self.world = World(np.zeros((83,83)))
         self.world = self.world.occlusion(self.world.state_to_pixel(init_state[0:2]))
 
 
@@ -222,18 +261,82 @@ class FMTPlanner():
         '''Load pre-computed reachable sets'''
         self.Pset = Pset
         self.reachable = reachable
-        self.bool_valid = np.zeros(len(self.Pset), dtype=bool)
-        for p in range(len(self.Pset)):
-            self.graph.add_node(p)
-            self.node_list.append(np.array(self.Pset[p]))
-            if self.world.check_collision(np.array(self.Pset[p])[0:2], None):
-                self.bool_valid[p] = True
+        
+    def goal_inter(self, start_id: int) -> np.ndarray:
+        '''Returns best intermediate goal to explore'''
+        start_state = self.Pset[start_id]
+        v = np.sqrt(start_state[2]**2 + start_state[3]**2)
+
+        # sample candidate goals on free space boundary
+        candidates = []
+        free_space = np.where(self.world.map_design == 0.5)
+        # find boundary of free space
+        boundary = []
+        for i in range(free_space[0].shape[0]):
+            left = self.world.map_design[free_space[0][i], max(0, free_space[1][i]-1)]
+            right = self.world.map_design[free_space[0][i], min(self.world.map_size[1]-1, free_space[1][i]+1)]
+            top = self.world.map_design[max(0, free_space[0][i]-1), free_space[1][i]]
+            bottom = self.world.map_design[min(self.world.map_size[0]-1, free_space[0][i]+1), free_space[1][i]]
+            if (left ==0 or right ==0 or top ==0 or bottom ==0) and (
+                left !=1 and right !=1 and top !=1 and bottom !=1
+            ):
+                boundary.append([free_space[0][i], free_space[1][i]])
+
+        # Sample points on the boundary evenly
+        for i in range(0, len(boundary), 3):
+            # convert to state
+            state = self.world.pixel_to_state(np.array(boundary[i]))
+            candidates.append(state)
+        
+        
+
+        costs = []
+        subgoal_ids = []
+
+        # find the closest collision-free subgoal to each candidate
+        for subgoal in candidates:
+            subgoal_idx_all = np.where(rankdata(
+                cdist(np.array(self.Pset)[:,0:2],subgoal.reshape(1,2)).flatten(), method='min'
+                )-1==0)[0]
+            valid_idx = np.where(self.bool_valid[subgoal_idx_all])[0]
+            subgoal_idx = subgoal_idx_all[valid_idx]
+            subgoal_ids += list(subgoal_idx)
+        # compute cost to go and cost to come for each subgoal
+        for subgoal_idx in subgoal_ids:
+            if any([(i == subgoal_idx) for i in self.goal_explored]):
+                # this subgoal is already explored
+                costs.append(np.inf)
+            else:
+                subgoal = self.Pset[subgoal_idx]
+                # cost to come
+                self.goal_id = subgoal_idx
+                if subgoal_idx not in self.V_unvisited:
+                    cost_to_come = self.cost[self.goal_id]
+                else:
+                    cost_to_come = np.inf
+                # cost to go
+                self.goal_id = self.init_goal_id
+                if subgoal[1]<=self.Pset[self.goal_id][1]:
+                    dist_to_go = np.linalg.norm(np.array(subgoal[0:2])-np.array(self.Pset[self.goal_id][0:2]))
+                else:
+                    dist_to_go = np.inf
+                if dist_to_go <= 1.0: #goal radius
+                    dist_to_go = 0
+                # append
+                costs.append(cost_to_come + 10*dist_to_go/v)
+
+        if all(np.isinf(costs)):
+            return None
+        else:
+            self.goal_id = subgoal_ids[np.argmin(costs)]
+            return self.Pset[self.goal_id]
 
 
 
     def plan(self,
              start: np.ndarray,
-             goal: np.ndarray) -> dict:
+             goal: np.ndarray,
+             map_design: np.ndarray) -> dict:
         """
         Run path planning
 
@@ -251,24 +354,52 @@ class FMTPlanner():
         # assert self.world.check_collision(start[0:2], None)
         # assert self.check_collision(goal[0:2], None)
         
+        # TODO: update world
+        self.world = self.world.update(map_design)
         self.world = self.world.occlusion(self.world.state_to_pixel(start[0:2]))
+        
+        # initialize
+        self.bool_valid = np.zeros(len(self.Pset), dtype=bool)
+        
+        for p in range(len(self.Pset)):
+            self.graph.add_node(p)
+            self.node_list.append(np.array(self.Pset[p]))
+            if self.world.check_collision(np.array(self.Pset[p])[0:2], None):
+                self.bool_valid[p] = True
+        self.V_unvisited =np.ones(len(self.Pset), dtype=bool)
+        self.V_open = None
+        self.time_to_come = np.zeros(self.n_samples)
+        self.graph.remove_edges_from(list(self.graph.edges))
         
         # find nearest valid sampled node to current state and goal state
         start_idx_all = np.argsort(cdist(np.array(self.Pset),np.array([start])), axis=0)
         start_valid_idx = np.where(self.bool_valid[start_idx_all])[0]
         start_id = start_idx_all[start_valid_idx[0]][0]
-        goal_idx_all = np.argsort(cdist(np.array(self.Pset),np.array([goal])), axis=0)
-        goal_valid_idx = np.where(self.bool_valid[goal_idx_all])[0]
-        goal_id = goal_idx_all[goal_valid_idx[0]][0]
+        # goal doesn't have to be valid
+        goal_id = np.argmin(cdist(np.array(self.Pset),np.array([goal])), axis=0)[0]
+        self.init_goal_id = goal_id
 
-        self.graph.remove_edges_from(list(self.graph.edges))
-
-        self.time_to_come = np.zeros(self.n_samples)
-
+        # build tree
         z, goal_flag = self.build_tree(start_id, goal_id)
+        self.goal_explored = []
         
-        if goal_flag == 1:
+        # TODO: here add intermediate goal
+        if goal_flag == 1: # path found
             idx_solution = [x for x in nx.shortest_path(self.graph, start_id, z)]
+        else:
+            while goal_flag == 0:
+                goal_loc = self.goal_inter(start_id)
+                
+                if goal_loc is None or self.goal_id == goal_id:
+                    goal_flag = -1
+                    idx_solution = [self.goal_id]
+                    break
+                else:
+                    print('Intermediate goal:', goal_loc)
+                    self.goal_explored.append(self.goal_id)
+                    if self.goal_id not in self.V_unvisited:
+                        idx_solution = [x for x in nx.shortest_path(self.graph, start_id, self.goal_id)]
+                        break
         
         # output controls
         x_waypoints = []
@@ -296,10 +427,11 @@ class FMTPlanner():
          # initialize
         goal_flag = 0
         z = start_id
-        V_open = pqdict({z: 0.})
+        self.V_open = pqdict({z: 0.})
+        self.cost = pqdict({z: 0.})
         V_closed = list()
-        V_unvisited = list(range(len(self.node_list)))
-        V_unvisited.remove(z)
+        self.V_unvisited = list(range(len(self.node_list)))
+        self.V_unvisited.remove(z)
 
         # start search
         for n_steps in range(self.max_search_iter):
@@ -308,14 +440,14 @@ class FMTPlanner():
                 goal_flag = 1
                 break
             R_plus = self.reachable[z][1][0]
-            X_near = list(set(R_plus) & set(V_unvisited))
+            X_near = list(set(R_plus) & set(self.V_unvisited))
             
             for x in X_near:
                 R_minus = self.reachable[x][2][0]
-                Y_near = list(set(R_minus) & set(V_open))
+                Y_near = list(set(R_minus) & set(self.V_open))
                 if len(Y_near) == 0:
                     continue
-                y_min = Y_near[np.argmin([V_open[y] for y in Y_near])] 
+                y_min = Y_near[np.argmin([self.V_open[y] for y in Y_near])] 
                 x_waypoints = self.reachable[y_min][1][3][self.reachable[y_min][1][0].index(x)][0]
                 time_new = self.reachable[x][2][2][self.reachable[x][2][0].index(y_min)]
                 
@@ -335,19 +467,23 @@ class FMTPlanner():
                 if connect:
                     self.graph.add_edge(y_min, x)
                     self.time_to_come[y_min] = self.time_to_come[x] + time_new
-                    if x in V_open:
-                        V_open.updateitem(
-                            x, V_open[y_min] + self.reachable[y_min][1][1][self.reachable[y_min][1][0].index(x)])
+                    if x in self.V_open:
+                        self.V_open.updateitem(
+                            x, self.V_open[y_min] + self.reachable[y_min][1][1][self.reachable[y_min][1][0].index(x)])
+                        self.cost.updateitem(
+                            x, self.V_open[y_min] + self.reachable[y_min][1][1][self.reachable[y_min][1][0].index(x)])
                     else:
-                        V_open.additem(
-                            x, V_open[y_min] + self.reachable[y_min][1][1][self.reachable[y_min][1][0].index(x)])
-                    V_unvisited.remove(x)
-            V_open.pop(z)
+                        self.V_open.additem(
+                            x, self.V_open[y_min] + self.reachable[y_min][1][1][self.reachable[y_min][1][0].index(x)])
+                        self.cost.additem(
+                            x, self.V_open[y_min] + self.reachable[y_min][1][1][self.reachable[y_min][1][0].index(x)])
+                    self.V_unvisited.remove(x)
+            self.V_open.pop(z)
             V_closed.append(z)
-            if len(V_open) == 0:
-                print("Search failed")
+            if len(self.V_open) == 0:
+                # print("Search failed")
                 break
-            z = V_open.top()
+            z = self.V_open.top()
         return z, goal_flag
 
 
