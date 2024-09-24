@@ -18,16 +18,17 @@ dataset_config = dataset_config()
 # Mesh IO
 import numpy as np
 from utils.make_args import make_args_parser
-from utils.pc_util import preprocess_point_cloud, pc_to_axis_aligned_rep
+from utils.pc_util import preprocess_point_cloud, pc_to_axis_aligned_rep, write_bbox_axis_aligned
 from utils.box_util import box2d_iou
 from models.model_perception import MLPModelDet
 
 import IPython as ipy
+import open3d as o3d
 
 np.random.seed(0)
 torch.manual_seed(0)
 class Zed:
-    def __init__(self,state_ic=[0.0,0.0,0.0,0.0], yaw_ic=0.0):
+    def __init__(self,state_ic=[0.0,0.0,0.0,0.0], yaw_ic=0.0, save_folder=None):
         # init camera
         parser = argparse.ArgumentParser()
         parser.add_argument('--input_svo_file', type=str, help='Path to an .svo file, if you want to replay it',default = '')
@@ -105,6 +106,14 @@ class Zed:
         # self.model_cp = torch.load('perception_model_finetune')
         self.model_cp.load_state_dict(torch.load("perception_model"))
 
+        self.save_folder=save_folder
+        if self.save_folder is not None:
+            # Enable recording with the filename specified in argument
+            recordingParameters = sl.RecordingParameters()
+            recordingParameters.compression_mode = sl.SVO_COMPRESSION_MODE.LOSSLESS
+            recordingParameters.video_filename =  self.save_folder + '/test.svo'
+            err = self.zed.enable_recording(recordingParameters)
+
     def get_IMU(self):
         ts_handler = TimestampHandler()
         sensors_data = sl.SensorsData()
@@ -167,6 +176,14 @@ class Zed:
         # print("CP: ", cp)
         if self.zed.grab(self.runtime) == sl.ERROR_CODE.SUCCESS:
             self.zed.retrieve_measure(self.pc,  sl.MEASURE.XYZRGBA, sl.MEM.CPU)
+            if self.save_folder is not None:
+                self.zed.grab()
+                t = time.asctime()
+                err = self.pc.write(self.save_folder + '/Pointcloud_ZED' + t + '.ply')
+                if(err == sl.ERROR_CODE.SUCCESS):
+                    print("Current .ply file saving succeed")
+                else:
+                    print("Current .ply file failed")
             # Get pointcloud as a numpy array (remove nan, -inf, +inf and RGB values)
             points_ = np.array(self.pc.get_data())
             #print(np.shape(points), np.min(points), np.max(points))
@@ -217,7 +234,14 @@ class Zed:
             boxes_[i,:,0] = boxes[i,:,1]
             boxes_[i,0,1] = -boxes[i,1,0]
             boxes_[i,1,1] = -boxes[i,0,0]
-
+        if self.save_folder is not None:
+            boxes_to_save = np.zeros((len(boxes),2,3))
+            for i in range(len(boxes)):
+                boxes_to_save[i,:,0] = boxes[i,:,1]
+                boxes_to_save[i,0,1] = -boxes[i,1,0]
+                boxes_to_save[i,1,1] = -boxes[i,0,0]
+                boxes_to_save[i,:,2] = -boxes[i,:,2]
+            write_bbox_axis_aligned(boxes_to_save, self.save_folder + "/output_bboxes" + t + ".ply")
         return boxes_
 
     def get_boxes_old(self, cp=0.4, num_boxes=10):

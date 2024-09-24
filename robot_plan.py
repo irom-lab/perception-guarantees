@@ -7,6 +7,7 @@ from utils.go1_move import *
 from utils.plotting import *
 import time
 import pickle
+import copy
 
 np.random.seed(0)
 def state_to_planner(state, sp):
@@ -50,25 +51,25 @@ def boxes_to_planner_frame(boxes, sp):
 def plan_loop():
     # ****************************************************
     # SET DESIRED FLAGS
-    vicon = True # set if want vicon state active; If true, make sure ./vicon.sh is running from pg_ws (and zed box connected to gas dynamics network)
+    vicon = False # set if want vicon state active; If true, make sure ./vicon.sh is running from pg_ws (and zed box connected to gas dynamics network)
     state_type = 'zed' #'zed' #if want to set the state used as the vicon state, 'zed' 
     replan = True # set if want to just follow open loop plan
-    save_traj = True  # set if want to save trajectory and compare against plan
+    save_traj = False  # set if want to save trajectory and compare against plan
     plot_traj = True  # set if want to visualize trajectory at the end of execution
-    goal_forrestal = [7.0, 2.0, 0.0, 0.5] # goal in forrestal coordinates
-    reachable_file = 'planning/pre_compute/reachable_10Hz_leftgoal.pkl'
-    pset_file = 'planning/pre_compute/Pset_10Hz_leftgoal.pkl'
+    goal_forrestal = [7.0, 0.0, 0.0, 0.5] # goal in forrestal coordinates
+    reachable_file = 'planning/pre_compute/reachable_10Hz_middlegoal.pkl'
+    pset_file = 'planning/pre_compute/Pset_10Hz_middlegoal.pkl'
     num_samples = 2000  # number of samples used for the precomputed files
     dt = 0.1 #   planner dt
     radius = 0.7 # distance between intermediate goals on the frontier
     chairs = [1, 2, 3, 4,5,6, 7, 8, 9, 10, 11, 12]  # list of chair labels to be used to get ground truth bounding boxes
     num_detect = 15  # number of boxes for 3DETR to detect
     robot_radius = 0.14
-    cp = 0.73 # 0.73 # 0.61 #0.02
-    sensor_dt = 1.0 # time in seconds to replan
+    cp = 0.02 # 0.73 # 0.61 #0.02
+    sensor_dt = 0.8 # time in seconds to replan
     num_times_detect = 1
     max_search_iter = 2000
-    result_dir = 'results/env30_cp_073/' # set to unique trial identifier if saving results
+    result_dir = 'results/supplementary_middle_goal_dt_08_cp002/' # set to unique trial identifier if saving results
     is_finetune = False
     # ****************************************************
     
@@ -107,14 +108,15 @@ def plan_loop():
     # sp.find_goal_reachable(reachable)
     sp.load_reachable(Pset, reachable)
 
-    go1 = Go1_move(sp.goal_f, vicon=vicon, state_type=state_type)
+    go1 = Go1_move(sp.goal_f, vicon=vicon, state_type=state_type, save_folder=result_dir)
     go1.get_state()
     # print(go1.state)
     # time.sleep(2)
     time.sleep(dt)
-    chair_states_bb, chair_yaws = chair_states.get_true_bb()
-    ground_truth = boxes_to_planner_frame(chair_states_bb, sp)
-    print("ground truth bb (planner coords): ", ground_truth, ground_truth.shape)
+    if vicon:
+        chair_states_bb, chair_yaws = chair_states.get_true_bb()
+        ground_truth = boxes_to_planner_frame(chair_states_bb, sp)
+        print("ground truth bb (planner coords): ", ground_truth, ground_truth.shape)
     
     # ****************************************************
     # QUICK MOTION/STATE DEBUG CODE. Comment out planning
@@ -132,7 +134,7 @@ def plan_loop():
     
     # ****************************************************
     # GET INITIAL PLAN
-    SPs.append(sp)
+    SPs.append(copy.deepcopy(sp))
     t = 0
 
     # perception + cp
@@ -158,13 +160,14 @@ def plan_loop():
     idx_prev = 0
     if not replan:
         plan_traj.append(res)
-    vicon_state, vicon_yaw, vicon_ts = go1.get_true_state()
+    if vicon:
+        vicon_state, vicon_yaw, vicon_ts = go1.get_true_state()
     # print("yaw", vicon_yaw)
-    vicon_traj.append(vicon_state)
+        vicon_traj.append(vicon_state)
 
     gs, _, yaw = go1.get_state()
     state_traj.append(gs)
-    SPs.append(sp)
+    SPs.append(copy.deepcopy(sp))
     
     # fig, ax = sp.world.show()
     # plt.show()
@@ -194,9 +197,10 @@ def plan_loop():
             boxes = boxes[:,:,0:2]
             # print("Boxes before planner transform ",  boxes)
             boxes = boxes_to_planner_frame(boxes, sp)
-            vicon_state, vicon_yaw, vicon_ts = go1.get_true_state()
-            # print("yaw", vicon_yaw)
-            vicon_traj.append(vicon_state)
+            if vicon:
+                vicon_state, vicon_yaw, vicon_ts = go1.get_true_state()
+                # print("yaw", vicon_yaw)
+                vicon_traj.append(vicon_state)
             plan_st = time.time()
             # print("Boxes after planner transform ",  boxes)
             res = sp.plan(state, boxes)
@@ -205,7 +209,7 @@ def plan_loop():
             et = time.time()
             t += (et-st)
             replan_times.append(plan_et-plan_st)
-            SPs.append(sp)
+            SPs.append(copy.deepcopy(sp))
             # if plot_traj and len(res[0]) > 1:
             #     t_str = str(round(t, 1))
             #     plot_trajectories(plan_traj, sp, vicon_traj, state_traj, replan_state=replan_states, ground_truth=[ground_truth, chair_yaws], replan=replan, save_fig=save_traj, filename=result_dir+t_str)
@@ -308,7 +312,7 @@ def plan_loop():
             # go1.move(action)
             # time.sleep(sp.dt)
             # t += sp.dt
-        if t > 60:
+        if t > 110:
             # time safety break
             print("BREAK 2: RAN OUT OF TIME")
             break
@@ -316,7 +320,7 @@ def plan_loop():
     # print("res 2", res[2])
     if save_traj:
         # check_dir(result_dir)
-        SPs.append(sp)
+        SPs.append(copy.deepcopy(sp))
         with open(result_dir + 'plan.pkl', 'wb') as f:
             pickle.dump(plan_traj, f)
         np.save(result_dir + 'state_traj.npy', state_traj)

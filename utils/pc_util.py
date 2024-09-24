@@ -461,5 +461,35 @@ def pc_cam_to_3detr(points_in_cam_frame):
 
     return points_new
 
+def write_bbox_axis_aligned(scene_bbox, out_filename):
+    """Export scene bbox to meshes
+    Args:
+        scene_bbox: (N x 2 x 3 numpy array): xyz pos of min and mix vertices of box
+        out_filename: (string) filename
 
+    Note:
+        To visualize the boxes in MeshLab.
+        1. Select the objects (the boxes)
+        2. Filters -> Polygon and Quad Mesh -> Turn into Quad-Dominant Mesh
+        3. Select Wireframe view.
+    """
 
+    def convert_box_to_trimesh_fmt(box):
+        ctr = (box[0,:] + box[1,:])/2
+        lengths = box[1,:] - box[0,:]
+        trns = np.eye(4)
+        trns[0:3, 3] = ctr
+        trns[3, 3] = 1.0
+        box_trimesh_fmt = trimesh.creation.box(lengths, trns)
+        return box_trimesh_fmt
+
+    scene = trimesh.scene.Scene()
+    for box in scene_bbox:
+        scene.add_geometry(convert_box_to_trimesh_fmt(box))
+
+    mesh_list = trimesh.util.concatenate(scene.dump())
+    # save to ply file
+    # trimesh.io.export.export_mesh(mesh_list, out_filename, file_type="ply")
+    mesh_list.export(out_filename, file_type="ply")
+
+    return

@@ -8,7 +8,7 @@ import robot_interface as sdk
 
 
 class Go1_move():
-    def __init__(self, goal, vicon=False, state_type='zed'):
+    def __init__(self, goal, vicon=False, state_type='zed', save_folder=None):
         # self.sp = sp
         self.state = [0.0, 0.0, 0.0, 0.0]
         self.true_state = [0.0, 0.0, 0.0, 0.0]
@@ -34,14 +34,14 @@ class Go1_move():
                 self.state = self.true_state
                 self.timestamp = self.ts_timestamp
                 self.yaw = self.ts_yaw
-                self.camera = Zed(state_ic=self.true_state, yaw_ic=self.ts_yaw)
+                self.camera = Zed(state_ic=self.true_state, yaw_ic=self.ts_yaw, save_folder=save_folder)
             # set zed camera for bounding boxes
             # initialize Zed 
            
 
         if self.state_type == 'zed':
             # initialize Zed 
-            self.camera = Zed(state_ic=self.true_state, yaw_ic=self.ts_yaw)
+            self.camera = Zed(state_ic=self.true_state, yaw_ic=self.ts_yaw, save_folder=save_folder)
             time.sleep(1)
             # wait for initial state
             if (self.camera.get_pose()[0] == None):
@@ -148,5 +148,3 @@ class Go1_move():
 
         self.udp.SetSend(self.cmd)
         self.udp.Send()
-
-
