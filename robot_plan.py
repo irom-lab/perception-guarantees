@@ -7,8 +7,8 @@ from utils.go1_move import *
 from utils.plotting import *
 import time
 import pickle
+import copyreg
 import copy
-#test
 
 np.random.seed(0)
 def state_to_planner(state, sp):
@@ -70,7 +70,8 @@ def plan_loop():
     sensor_dt = 0.8 # time in seconds to replan
     num_times_detect = 1
     max_search_iter = 2000
-    result_dir = 'results/supplementary_middle_goal_dt_08_cp002/' # set to unique trial identifier if saving results
+    #result_dir = 'results/supplementary_middle_goal_dt_08_cp002/' # set to unique trial identifier if saving results
+    result_dir = None
     is_finetune = False
     # ****************************************************
     
@@ -91,7 +92,7 @@ def plan_loop():
     plan_traj = []
     replan_states = []
     replan_times = []
-    SPs = []
+    #SPs = []
     actions_applied = []
 
     # load pre-computed: need to recompute for actual gains
@@ -135,7 +136,7 @@ def plan_loop():
     
     # ****************************************************
     # GET INITIAL PLAN
-    SPs.append(copy.deepcopy(sp))
+    #SPs.append(copy.deepcopy(sp))
     t = 0
 
     # perception + cp
@@ -151,8 +152,12 @@ def plan_loop():
         boxes = boxes[:,:,0:2]
         # print("Boxes before planner transform ",  boxes)
         boxes = boxes_to_planner_frame(boxes, sp)
+        mt = time.time()
+        print("box time: ", mt-st)
         res = sp.plan(state, boxes)
         et = time.time()
+        print("planning time: ", et-mt)
+        print("------------------------")
     
 
     # print(start_idx,Pset[start_idx],state)
@@ -168,7 +173,7 @@ def plan_loop():
 
     gs, _, yaw = go1.get_state()
     state_traj.append(gs)
-    SPs.append(copy.deepcopy(sp))
+    #SPs.append(copy.deepcopy(sp))
     
     # fig, ax = sp.world.show()
     # plt.show()
@@ -203,14 +208,17 @@ def plan_loop():
                 # print("yaw", vicon_yaw)
                 vicon_traj.append(vicon_state)
             plan_st = time.time()
+            print("box time: ", plan_st - st)
             # print("Boxes after planner transform ",  boxes)
             res = sp.plan(state, boxes)
             plan_et = time.time()
             plan_traj.append(res)
+            print("plan time: ", plan_et - plan_st)
+            print("-------------------")
             et = time.time()
             t += (et-st)
             replan_times.append(plan_et-plan_st)
-            SPs.append(copy.deepcopy(sp))
+            #SPs.append(copy.deepcopy(sp))
             # if plot_traj and len(res[0]) > 1:
             #     t_str = str(round(t, 1))
             #     plot_trajectories(plan_traj, sp, vicon_traj, state_traj, replan_state=replan_states, ground_truth=[ground_truth, chair_yaws], replan=replan, save_fig=save_traj, filename=result_dir+t_str)
@@ -228,6 +236,7 @@ def plan_loop():
             # plt.show()
             # fig, ax = plot_trajectories(res[0], sp)
             # plt.show()
+            print("Taking time when length > 1")
             policy_before_trans = np.vstack(res[2])
             # print("action shpae", policy_before_trans.shape)
             policy = (np.array([[0,1],[-1,0]])@policy_before_trans.T).T
@@ -279,6 +288,7 @@ def plan_loop():
             if go1.check_goal():
                 break
         else:
+            print("Taking other time")
             plan_traj.pop()
             print("BREAK 1: FAILED TO FIND PLAN")
             # for step in range(int(sp.sensor_dt/sp.dt)):
@@ -321,14 +331,14 @@ def plan_loop():
     # print("res 2", res[2])
     if save_traj:
         # check_dir(result_dir)
-        SPs.append(copy.deepcopy(sp))
+        #SPs.append(copy.deepcopy(sp))
         with open(result_dir + 'plan.pkl', 'wb') as f:
             pickle.dump(plan_traj, f)
         np.save(result_dir + 'state_traj.npy', state_traj)
         with open(result_dir + 'ground_truth_bb.pkl', 'wb') as f:
             pickle.dump([ground_truth, chair_yaws], f)
-        with open(result_dir + 'safe_planners.pkl', 'wb') as f:
-            pickle.dump(SPs, f)
+        # with open(result_dir + 'safe_planners.pkl', 'wb') as f:
+        #     pickle.dump(SPs, f)
         np.save(result_dir + 'replan_times.npy', replan_times)
         np.save(result_dir + 'action_applied.npy', actions_applied)
         np.save(result_dir + 'replan_states.npy', replan_states)
