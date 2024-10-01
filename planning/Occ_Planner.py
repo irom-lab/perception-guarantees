@@ -206,7 +206,7 @@ class World():
         return self.check_collision(new_state, None)
         
 
-class FMTPlanner():
+class Safe_Planner():
     def __init__(
         self,
         # map_design: np.ndarray,
