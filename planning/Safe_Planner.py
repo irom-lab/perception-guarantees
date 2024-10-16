@@ -15,9 +15,6 @@ from shapely.geometry.polygon import orient
 from shapely import contains_xy
 from planning.utils import turn_box, non_det_filter, filter_reachable
 
-import ray
-from ray.experimental import tqdm_ray
-remote_tqdm = ray.remote(tqdm_ray.tqdm)
 
 # load model parameters
 [k1, k2, A, B, R, BRB] = pickle.load(open('planning/sp_var.pkl','rb'))
@@ -179,8 +176,36 @@ class Safe_Planner:
         '''Computes reachable sets for all pre-sampled points'''
 
         import ray
+        from tqdm import tqdm
 
         # sample nodes on grid
+        self.sample_pset()
+
+        # pre-compute reachable sets
+        @ray.remote # speed up
+        def compute_reachable(node_idx):
+            #def compute_reachable(node_idx, bar: tqdm_ray.tqdm):
+            node = self.Pset[node_idx]
+            fset, fdist, ftime, ftraj = filter_reachable(node,self.Pset,self.r,self.vx_range,self.vy_range, 'F', self.dt)
+            bset, bdist, btime, btraj = filter_reachable(node,self.Pset,self.r,self.vx_range,self.vy_range, 'B', self.dt)
+            #bar.update.remote(1)
+            return (node_idx,(fset, fdist, ftime, ftraj), (bset, bdist, btime, btraj))
+
+        #ray.init()
+        
+        #bar = remote_tqdm.remote(total= len(self.Pset))
+        #futures = [compute_reachable.remote(node_idx, bar) for node_idx in range(len(self.Pset))]
+
+        futures = [compute_reachable.remote(node_idx) for node_idx in range(len(self.Pset))]
+        
+        self.reachable = []
+        for res in tqdm(ray.get(futures), total=len(self.Pset), desc="Processing"):
+            self.reachable.append(res)
+
+        #bar.remote.close()
+        ray.shutdown()
+    
+    def sample_pset(self):
         self.Pset = []
         num_speed = 5
         num_horizontal = int(np.ceil(np.sqrt(self.n_samples/num_speed)))
@@ -191,22 +216,6 @@ class Safe_Planner:
                     self.Pset.append([i,j,k,self.speed]) # constant forward speed
         self.n_samples = len(self.Pset)
         self.Pset.append(self.goal)
-
-        # pre-compute reachable sets
-        @ray.remote # speed up
-        def compute_reachable(node_idx, bar: tqdm_ray.tqdm):
-            node = self.Pset[node_idx]
-            fset, fdist, ftime, ftraj = filter_reachable(node,self.Pset,self.r,self.vx_range,self.vy_range, 'F', self.dt)
-            bset, bdist, btime, btraj = filter_reachable(node,self.Pset,self.r,self.vx_range,self.vy_range, 'B', self.dt)
-            bar.update.remote(1)
-            return (node_idx,(fset, fdist, ftime, ftraj), (bset, bdist, btime, btraj))
-
-        ray.init()
-        bar = remote_tqdm.remote(total= len(self.Pset))
-        futures = [compute_reachable.remote(node_idx, bar) for node_idx in range(len(self.Pset))]
-        self.reachable = ray.get(futures)
-        bar.close()
-        ray.shutdown()
 
     def load_reachable(self, Pset, reachable):
         '''Load pre-computed reachable sets'''
