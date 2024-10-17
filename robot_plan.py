@@ -195,7 +195,7 @@ def plan_loop():
 
     # plan
     def plan():
-        nonlocal current_plan
+        nonlocal current_plan, next_plan
         st = time.time()
         gs, _, yaw = go1.get_state()
         state_traj.append(gs)
@@ -239,7 +239,7 @@ def plan_loop():
     
     # execute
     def execute():
-        nonlocal next_plan
+        nonlocal current_plan, next_plan
         # print(res[0])
         # print("res 2", res[2])
         # fig, ax = sp.show_connection(res[0])
@@ -254,7 +254,7 @@ def plan_loop():
                 next_plan = None
 
         print("Taking time when length > 1")
-        policy_before_trans = np.vstack(res[2])
+        policy_before_trans = np.vstack(current_plan[2])
         # print("action shpae", policy_before_trans.shape)
         policy = (np.array([[0,1],[-1,0]])@policy_before_trans.T).T
         prev_policy = np.copy(policy)
