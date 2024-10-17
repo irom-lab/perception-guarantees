@@ -23,7 +23,7 @@ class Robot_Plan:
         self.goal_forrestal = [7.0, 0.0, 0.0, 0.5] # goal in forrestal coordinates
         self.reachable_file = 'planning/pre_compute/reachable_1_10.pkl'
         self.pset_file = 'planning/pre_compute/Pset_1_10.pkl'
-        self.num_samples = 1000  # number of samples used for the precomputed files
+        self.num_samples = 1050  # number of samples used for the precomputed files
         self.dt = 0.1 #   planner dt
         self.radius = 0.7 # distance between intermediate goals on the frontier
         self.chairs = [1, 2, 3, 4,5,6, 7, 8, 9, 10, 11, 12]  # list of chair labels to be used to get ground truth bounding boxes
@@ -38,14 +38,18 @@ class Robot_Plan:
         self.is_finetune = False
         # ****************************************************
 
+        self.goal_reached = False
+
         f = open(self.reachable_file, 'rb')
         self.reachable = pickle.load(f)
         f = open(self.pset_file, 'rb')
         self.Pset = pickle.load(f)
 
-        sp = Safe_Planner(goal_f=self.goal_forrestal, sensor_dt=self.sensor_dt, dt=self.dt, n_samples=self.num_samples, radius=self.radius, max_search_iter=self.max_search_iter, speed=1)
-        print("goal (planner coords): ", sp.goal)
-        self.go1 = Go1_move(sp.goal_f, vicon=self.vicon, state_type=self.state_type, save_folder=self.result_dir)
+        self.sp = Safe_Planner(goal_f=self.goal_forrestal, sensor_dt=self.sensor_dt, dt=self.dt, n_samples=self.num_samples, radius=self.radius, max_search_iter=self.max_search_iter, speed=1)
+        print("goal (planner coords): ", self.sp.goal)
+
+        self.sp.load_reachable(self.Pset, self.reachable)
+        self.go1 = Go1_move(self.sp.goal_f, vicon=self.vicon, state_type=self.state_type, save_folder=self.result_dir)
 
         self.current_plan = None
         self.next_plan = None
@@ -77,6 +81,15 @@ class Robot_Plan:
             boxes_new[i,:,1] =  boxes[i,:,0]
         return boxes_new
 
+    def transform_plan(self, arr):
+        if len(arr) > 1:
+            policy_before_transformation = np.vstack(arr)
+        else:
+            policy_before_transformation = np.array(arr)
+        policy = (np.array([[0,1],[-1,0]])@policy_before_transformation.T).T
+        #print(policy)
+        return policy
+
     # def get_boxes(sp):
     #     # fake random boxes in planner coordinates
     #     # replace with camera + 3detr later
@@ -92,52 +105,88 @@ class Robot_Plan:
     #     return np.array(boxes)
 
     def plan(self):
-        while self.running:
-            # Perception + planning logic
-            state = self.state_to_planner(self.go1.state)
-            t_1 = time.time()
-            boxes = self.go1.camera.get_boxes(self.cp, self.num_detect, self.is_finetune)
-            t_2 = time.time()
-            print(f"Inference time: {t_2 - t_1}")
-            boxes = boxes[:, :, 0:2]
-            boxes = self.boxes_to_planner_frame(boxes)
-            t_3 = time.time()
-            print(f"Box transformation time: {t_3 - t_2}")
-            new_plan = self.sp.plan(state, boxes)
-            t_4 = time.time()
-            print(f"Planning time: {t_4 - t_3}")
+        # Perception + planning logic
+        print("starting planning !!!!!")
+        
+        if self.current_plan is not None:
+            print(self.current_plan[1])
+            #print(np.vstack(self.current_plan[1]))
+            if len(self.current_plan) > 1:
+                future_state = np.vstack(self.current_plan[1])[19]
+            else:
+                future_state = self.current_plan[1][19]
+            state = self.state_to_planner(future_state)
+        else:
+            state = self.state_to_planner(self.go1.get_state()[0])
+        
+        print("predicted/real state: ", state)
+        t_1 = time.time()
+        boxes = self.go1.camera.get_boxes(self.cp, self.num_detect, self.is_finetune)
+        t_2 = time.time()
+        print(f"Inference time: {t_2 - t_1}")
+        boxes = boxes[:, :, 0:2]
+        boxes = self.boxes_to_planner_frame(boxes)
+        t_3 = time.time()
+        print(f"Box transformation time: {t_3 - t_2}")
+        new_plan = self.sp.plan(state, boxes)
+        t_4 = time.time()
+        print(f"Planning time: {t_4 - t_3}")
 
-            with self.lock:
-                self.next_plan = new_plan
+        with self.lock:
+            self.next_plan = new_plan
+            print("New plan ready.")
+        
+        self.plan_ready.set()
 
     def execute(self):
-        while self.running:
-            # Get the current plan to execute
+        while not self.goal_reached:
+            self.plan_ready.wait()
+
             with self.lock:
                 if self.current_plan is None and self.next_plan is not None:
+                    # Load the next plan into current_plan
                     self.current_plan = self.next_plan
                     self.next_plan = None
             
             if self.current_plan is not None:
-                # Execute the plan
-                for action in self.current_plan[0]:
+                # Execute the current plan
+                self.executing = True
+                transformed_plan = self.transform_plan(self.current_plan[2])
+                num_action = 1
+                for action in transformed_plan[:20]:
                     self.go1.move(action)
+                    print("action num: ", num_action)
                     if self.go1.check_goal():
+                        self.goal_reached = True
                         print("Goal reached. Stopping.")
-                        self.running = False
-                        break
+                        self.executing = False
+                        return
+                    num_action +=1
+                # Mark that execution is finished and ready for a new plan
+                self.executing = False
+                self.plan_ready.clear()
+                self.current_plan = None
+
+
 
     def start(self):
-        self.plan()
+        # Create an Event object to synchronize planning and execution
+        self.plan_ready = threading.Event()
 
+        # Step 1: Initial Plan
+        self.plan()  # Create the first plan
+
+        # Step 2: Start execution of the initial plan
         execution_thread = threading.Thread(target=self.execute)
         execution_thread.start()
 
+        # Step 3: Concurrent planning during execution
         while not self.goal_reached:
-            print("Re-planning for next steps...")
-            self.plan()
+            if not self.executing:  # Only plan when execution is ongoing
+                print("Re-planning during execution...")
+                self.plan()  # Re-plan while execution is happening
 
-        # Wait for execution thread to finish
+        # Wait for execution to finish
         execution_thread.join()
 
 
