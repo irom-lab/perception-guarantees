@@ -174,6 +174,7 @@ class Zed:
 
         # pc = sl.Mat()
         # print("CP: ", cp)
+        print("starting to get boxes")
         if self.zed.grab(self.runtime) == sl.ERROR_CODE.SUCCESS:
             self.zed.retrieve_measure(self.pc,  sl.MEASURE.XYZRGBA, sl.MEM.CPU)
             if self.save_folder is not None:
@@ -185,6 +186,7 @@ class Zed:
                 else:
                     print("Current .ply file failed")
             # Get pointcloud as a numpy array (remove nan, -inf, +inf and RGB values)
+            print("getting point cloud stuff")
             points_ = np.array(self.pc.get_data())
             #print(np.shape(points), np.min(points), np.max(points))
             points_ = points_[:,:,0:3]
@@ -194,6 +196,7 @@ class Zed:
             # points_ = points_.T
 
             # convert points to 3detr frame
+            print("converting points to 3detr frame")
             points = np.copy(points_)
             points[:,1] = points_[:,0]
             points[:,0] = -points_[:,1]
@@ -205,6 +208,7 @@ class Zed:
             # print(np.shape(points), np.min(points), np.max(points))
             if len(points) > 0:
                 if (len(points[0])>0):
+                    print("processing point cloud, running inference")
                     batch_size = 1
                     points = np.array(points).astype('float32')
                     # Downsample
@@ -213,14 +217,17 @@ class Zed:
                     pc_all = torch.from_numpy(points_ds).to(self.device)
                     boxes, box_features = self.get_box_from_pc(pc_all, cp, num_boxes,  is_finetune, False)
                 else:
+                    print("returns giant box")
                     points = np.zeros((1,self.num_pc_points, 3),dtype='float32')
                     pc_all = torch.from_numpy(points).to(self.device)
                     boxes, box_features = self.get_room_size_box(pc_all)
             else:
+                print("huge box again")
                 points = np.zeros((1,self.num_pc_points, 3),dtype='float32')
                 pc_all = torch.from_numpy(points).to(self.device)
                 boxes, box_features = self.get_room_size_box(pc_all)
         else:
+            print("huge box again x2")
             points = np.zeros((1,self.num_pc_points, 3),dtype='float32')
             pc_all = torch.from_numpy(points).to(self.device)
             boxes, box_features = self.get_room_size_box(pc_all)
@@ -228,6 +235,7 @@ class Zed:
 
         # # print("BOXES SHAPE", boxes.shape)
         # convert back to forrestal coords
+        print("converting boxes back to coordinate frame")
         boxes_ = np.zeros((len(boxes),2,2))
         for i in range(len(boxes)):
             # boxes[i,:,:] = corners[i][0,:,0:2]
@@ -242,6 +250,7 @@ class Zed:
                 boxes_to_save[i,1,1] = -boxes[i,0,0]
                 boxes_to_save[i,:,2] = -boxes[i,:,2]
             write_bbox_axis_aligned(boxes_to_save, self.save_folder + "/output_bboxes" + t + ".ply")
+        print("finished getting boxes")
         return boxes_
 
     def get_boxes_old(self, cp=0.4, num_boxes=10):

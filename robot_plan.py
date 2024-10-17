@@ -9,7 +9,6 @@ import time
 import pickle
 import copyreg
 import copy
-import threading
 
 np.random.seed(0)
 def state_to_planner(state, sp):
@@ -61,7 +60,7 @@ def plan_loop():
     goal_forrestal = [7.0, 0.0, 0.0, 0.5] # goal in forrestal coordinates
     reachable_file = 'planning/pre_compute/reachable_1_10.pkl'
     pset_file = 'planning/pre_compute/Pset_1_10.pkl'
-    num_samples = 1000  # number of samples used for the precomputed files
+    num_samples = 1050  # number of samples used for the precomputed files
     dt = 0.1 #   planner dt
     radius = 0.7 # distance between intermediate goals on the frontier
     chairs = [1, 2, 3, 4,5,6, 7, 8, 9, 10, 11, 12]  # list of chair labels to be used to get ground truth bounding boxes
@@ -145,43 +144,45 @@ def plan_loop():
     # boxes = np.array([[[2.0,4.0],[3.0,6.0]]])
     # boxes[:,0,:] -= cp
     # boxes[:,1,:] += cp
-    # state = state_to_planner(go1.state, sp)
-    # start_idx = np.argmin(cdist(np.array(sp.Pset),state))
-    # for i in range(num_times_detect):
-    #     st = time.time()
-    #     boxes = go1.camera.get_boxes(cp, num_detect, is_finetune)
-    #     boxes = boxes[:,:,0:2]
-    #     # print("Boxes before planner transform ",  boxes)
-    #     boxes = boxes_to_planner_frame(boxes, sp)
-    #     mt = time.time()
-    #     print("box time: ", mt-st)
-    #     res = sp.plan(state, boxes)
-    #     et = time.time()
-    #     print("planning time: ", et-mt)
-    #     print("------------------------")
+    state = state_to_planner(go1.state, sp)
+    start_idx = np.argmin(cdist(np.array(sp.Pset),state))
+    for i in range(num_times_detect):
+        t_1 = time.time()
+        boxes = go1.camera.get_boxes(cp, num_detect, is_finetune)
+        t_2 = time.time()
+        print("inference time: ", t_2-t_1)
+        boxes = boxes[:,:,0:2]
+        # print("Boxes before planner transform ",  boxes)
+        boxes = boxes_to_planner_frame(boxes, sp)
+        t_3 = time.time()
+        print("box time: ", t_3-t_2)
+        res = sp.plan(state, boxes)
+        t_4 = time.time()
+        print("planning time: ", t_4-t_3)
+        print("------------------------")
     
 
     # print(start_idx,Pset[start_idx],state)
-    # res = sp.plan(state, boxes)
-    # prev_policy = []
-    # idx_prev = 0
-    # if not replan:
-    #     plan_traj.append(res)
-    # if vicon:
-    #     vicon_state, vicon_yaw, vicon_ts = go1.get_true_state()
-    # # print("yaw", vicon_yaw)
-    #     vicon_traj.append(vicon_state)
+    res = sp.plan(state, boxes)
+    prev_policy = []
+    idx_prev = 0
+    if not replan:
+        plan_traj.append(res)
+    if vicon:
+        vicon_state, vicon_yaw, vicon_ts = go1.get_true_state()
+    # print("yaw", vicon_yaw)
+        vicon_traj.append(vicon_state)
 
-    # gs, _, yaw = go1.get_state()
-    # state_traj.append(gs)
+    gs, _, yaw = go1.get_state()
+    state_traj.append(gs)
     #SPs.append(copy.deepcopy(sp))
     
     # fig, ax = sp.world.show()
     # plt.show()
-    # times_apply_old_plan = 0
+    times_apply_old_plan = 0
     # ****************************************************
     # EXECUTION LOOP
-    #while True:
+    while True:
         # perception + cp
         # boxes = get_boxes(sp)
         # boxes = np.array([[[0,0],[0.01,0.01]]])
@@ -189,173 +190,129 @@ def plan_loop():
         # boxes[:,0,:] -= cp
         # boxes[:,1,:] += cp
 
-    current_plan = None
-    next_plan = None
-    lock = threading.Lock()
 
-    # plan
-    def plan():
-        nonlocal current_plan, next_plan
-        st = time.time()
-        gs, _, yaw = go1.get_state()
-        state_traj.append(gs)
-        state = state_to_planner(gs, sp)
-        # start_idx = np.argmin(cdist(np.array(sp.Pset),state))
-        replan_states.append([state[0, 0], state[0, 1]])
-
-        # print(start_idx,Pset[start_idx],state)
-        boxes = go1.camera.get_boxes(cp, num_detect, is_finetune)
-        boxes = boxes[:,:,0:2]
-        # print("Boxes before planner transform ",  boxes)
-        boxes = boxes_to_planner_frame(boxes, sp)
-        if vicon:
-            vicon_state, vicon_yaw, vicon_ts = go1.get_true_state()
-            # print("yaw", vicon_yaw)
-            vicon_traj.append(vicon_state)
-        plan_st = time.time()
-        print("box time: ", plan_st - st)
-        # print("Boxes after planner transform ",  boxes)
-        res = sp.plan(state, boxes)
-        plan_et = time.time()
-        plan_traj.append(res)
-        print("plan time: ", plan_et - plan_st)
-        print("-------------------")
-        et = time.time()
-        t += (et-st)
-        replan_times.append(plan_et-plan_st)
-
-        new_plan = res
-        with lock:
-            next_plan = new_plan
-
-
-        #SPs.append(copy.deepcopy(sp))
-        # if plot_traj and len(res[0]) > 1:
-        #     t_str = str(round(t, 1))
-        #     plot_trajectories(plan_traj, sp, vicon_traj, state_traj, replan_state=replan_states, ground_truth=[ground_truth, chair_yaws], replan=replan, save_fig=save_traj, filename=result_dir+t_str)
-
-        # sp.show(res[0], true_boxes=ground_truth)
-        # plt.show()
-    
-    # execute
-    def execute():
-        nonlocal current_plan, next_plan
-        # print(res[0])
-        # print("res 2", res[2])
-        # fig, ax = sp.show_connection(res[0])
-        # plt.show()
-        # fig, ax = sp.show(res[0])
-        # plt.show()
-        # fig, ax = plot_trajectories(res[0], sp)
-        # plt.show()
-        with lock:
-            if current_plan is None:
-                current_plan = next_plan
-                next_plan = None
-
-        print("Taking time when length > 1")
-        policy_before_trans = np.vstack(current_plan[2])
-        # print("action shpae", policy_before_trans.shape)
-        policy = (np.array([[0,1],[-1,0]])@policy_before_trans.T).T
-        prev_policy = np.copy(policy)
-        times_apply_old_plan = 0
-
-        # print("policy: ", policy)
         if replan:
-            end_idx = min(int(sp.sensor_dt/sp.dt),len(policy))
-        else:
-            end_idx = len(policy)
-        time_adjust = 0
-        for step in range(end_idx):
-            st = time.time()
-            idx_prev = step
-            # print("step: ", step)
-            if step == (end_idx - 1):
-                action = policy[step] / 4
-            else:
-                action = policy[step]
-        
-            # print("action: ", action)
-            go1.move(action)
-            actions_applied.append(action)
-            # update go1 state 
+            # plan
+            gs, _, yaw = go1.get_state()
+            state_traj.append(gs)
+            state = state_to_planner(gs, sp)
+            # start_idx = np.argmin(cdist(np.array(sp.Pset),state))
+            replan_states.append([state[0, 0], state[0, 1]])
+
+            # print(start_idx,Pset[start_idx],state)
+            t_1 = time.time()
+            boxes = go1.camera.get_boxes(cp, num_detect, is_finetune)
+            t_2 = time.time()
+            print("inference time: ", t_2 - t_1)
+            boxes = boxes[:,:,0:2]
+            # print("Boxes before planner transform ",  boxes)
+            boxes = boxes_to_planner_frame(boxes, sp)
             if vicon:
                 vicon_state, vicon_yaw, vicon_ts = go1.get_true_state()
                 # print("yaw", vicon_yaw)
                 vicon_traj.append(vicon_state)
-                # print("VICON state: ", vicon_state, " yaw", vicon_yaw)
-            if time_adjust==0:
-                gs, ts,yaw = go1.get_state()
-                state_traj.append(gs)
-                state = state_to_planner(gs, sp)
-                # print("ZED state: ", state, " yaw", yaw)
-            et = time.time()
-            # print("Time taken ", et-st )
-            if (sp.dt-et+st+time_adjust) >0:
-                time.sleep((sp.dt-et+st+time_adjust))
-                t += sp.dt+time_adjust
-                time_adjust =0
+            t_3 = time.time()
+            print("box time: ", t_3 - t_2)
+            # print("Boxes after planner transform ",  boxes)
+            res = sp.plan(state, boxes)
+            t_4 = time.time()
+            plan_traj.append(res)
+            print("plan time: ", t_4 - t_3)
+            print("-------------------")
+            # et = time.time()
+            # t += (et-st)
+            # replan_times.append(plan_et-plan_st)
+            #SPs.append(copy.deepcopy(sp))
+            # if plot_traj and len(res[0]) > 1:
+            #     t_str = str(round(t, 1))
+            #     plot_trajectories(plan_traj, sp, vicon_traj, state_traj, replan_state=replan_states, ground_truth=[ground_truth, chair_yaws], replan=replan, save_fig=save_traj, filename=result_dir+t_str)
+
+            # sp.show(res[0], true_boxes=ground_truth)
+            # plt.show()
+
+        # execute
+        if len(res[0]) > 1:
+            # print(res[0])
+            # print("res 2", res[2])
+            # fig, ax = sp.show_connection(res[0])
+            # plt.show()
+            # fig, ax = sp.show(res[0])
+            # plt.show()
+            # fig, ax = plot_trajectories(res[0], sp)
+            # plt.show()
+            print("Taking time when length > 1")
+            policy_before_trans = np.vstack(res[2])
+            # print("action shpae", policy_before_trans.shape)
+            policy = (np.array([[0,1],[-1,0]])@policy_before_trans.T).T
+            prev_policy = np.copy(policy)
+            times_apply_old_plan = 0
+
+            # print("policy: ", policy)
+            if replan:
+                end_idx = min(int(sp.sensor_dt/sp.dt),len(policy))
             else:
-                time_adjust = time_adjust+sp.dt-et+st
-                t += (et-st)
-            # print("t: ", t)
-        #state, ts,yaw = go1.get_state()
-        #state_traj.append(state)
-        # print("state: ", go1.state)
-        with lock:
-            current_plan = next_plan
-            next_plan = None
-    
-    def concurrent_execution():
-        plan()
-    
-        while True:
-            if go1.check_goal():
-                print("Goal reached, stopping execution.")
-                break
-
-            # Start executing the current plan
-            execute_thread = threading.Thread(target=execute)
-            execute_thread.start()
-
-            # While executing, plan for the next steps concurrently
-            plan()
-
-            # Wait for the execution to finish before starting the next cycle
-            execute_thread.join()
-
-
-    concurrent_execution()
-
-
-        # if replan:
-        #     replan()
+                end_idx = len(policy)
+            time_adjust = 0
+            for step in range(end_idx):
+                st = time.time()
+                idx_prev = step
+                # print("step: ", step)
+                if step == (end_idx - 1):
+                    action = policy[step] / 4
+                else:
+                    action = policy[step]
             
-        # if len(res[0]) > 1:
-        #     execute()
-        # else:
-        #     print("Taking other time")
-        #     plan_traj.pop()
-        #     print("BREAK 1: FAILED TO FIND PLAN")
-        #     # for step in range(int(sp.sensor_dt/sp.dt)):
+                # print("action: ", action)
+                go1.move(action)
+                actions_applied.append(action)
+                # update go1 state 
+                if vicon:
+                    vicon_state, vicon_yaw, vicon_ts = go1.get_true_state()
+                    # print("yaw", vicon_yaw)
+                    vicon_traj.append(vicon_state)
+                    # print("VICON state: ", vicon_state, " yaw", vicon_yaw)
+                if time_adjust==0:
+                    gs, ts,yaw = go1.get_state()
+                    state_traj.append(gs)
+                    state = state_to_planner(gs, sp)
+                    # print("ZED state: ", state, " yaw", yaw)
+                et = time.time()
+                # print("Time taken ", et-st )
+                if (sp.dt-et+st+time_adjust) >0:
+                    time.sleep((sp.dt-et+st+time_adjust))
+                    t += sp.dt+time_adjust
+                    time_adjust =0
+                else:
+                    time_adjust = time_adjust+sp.dt-et+st
+                    t += (et-st)
+                # print("t: ", t)
+            #state, ts,yaw = go1.get_state()
+            #state_traj.append(state)
+            # print("state: ", go1.state)
+            if go1.check_goal():
+                break
+        else:
+            print("Taking other time")
+            plan_traj.pop()
+            print("BREAK 1: FAILED TO FIND PLAN")
+            # for step in range(int(sp.sensor_dt/sp.dt)):
 
-        #     # apply the previous open loop policy for one time step
-        #     if (len(prev_policy) > idx_prev+1): #int(sp.sensor_dt/sp.dt):
-        #         times_apply_old_plan+=1
-        #         # for kk in range(int(sp.sensor_dt/sp.dt)):
-        #         idx_prev += 1
-        #         action = prev_policy[idx_prev]/4
-        #         go1.move(action)
-        #         actions_applied.append(action)
-        #         time.sleep(sp.dt)
-        #         t += sp.dt
-        #     else:
-        #         action = [0,0]
-        #         go1.move(action)
-        #         actions_applied.append(action)
-        #         time.sleep(sp.dt)
-        #         t += sp.dt
-
+            # apply the previous open loop policy for one time step
+            if (len(prev_policy) > idx_prev+1): #int(sp.sensor_dt/sp.dt):
+                times_apply_old_plan+=1
+                # for kk in range(int(sp.sensor_dt/sp.dt)):
+                idx_prev += 1
+                action = prev_policy[idx_prev]/4
+                go1.move(action)
+                actions_applied.append(action)
+                time.sleep(sp.dt)
+                t += sp.dt
+            else:
+                action = [0,0]
+                go1.move(action)
+                actions_applied.append(action)
+                time.sleep(sp.dt)
+                t += sp.dt
             # print("ACTION", action)
             # print("prev policy to end", prev_policy[idx_prev::])
             # print("shape", len(prev_policy), len(prev_policy[idx_prev::]))
@@ -370,10 +327,10 @@ def plan_loop():
             # go1.move(action)
             # time.sleep(sp.dt)
             # t += sp.dt
-        # if t > 110:
-        #     # time safety break
-        #     print("BREAK 2: RAN OUT OF TIME")
-        #     break
+        if t > 110:
+            # time safety break
+            print("BREAK 2: RAN OUT OF TIME")
+            break
 
     # print("res 2", res[2])
     if save_traj:
