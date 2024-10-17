@@ -176,7 +176,6 @@ class Safe_Planner:
         '''Computes reachable sets for all pre-sampled points'''
 
         import ray
-        from tqdm import tqdm
 
         # sample nodes on grid
         self.sample_pset()
@@ -184,25 +183,15 @@ class Safe_Planner:
         # pre-compute reachable sets
         @ray.remote # speed up
         def compute_reachable(node_idx):
-            #def compute_reachable(node_idx, bar: tqdm_ray.tqdm):
             node = self.Pset[node_idx]
             fset, fdist, ftime, ftraj = filter_reachable(node,self.Pset,self.r,self.vx_range,self.vy_range, 'F', self.dt)
             bset, bdist, btime, btraj = filter_reachable(node,self.Pset,self.r,self.vx_range,self.vy_range, 'B', self.dt)
-            #bar.update.remote(1)
+            #print((node_idx,(fset, fdist, ftime, ftraj), (bset, bdist, btime, btraj)))
             return (node_idx,(fset, fdist, ftime, ftraj), (bset, bdist, btime, btraj))
 
-        #ray.init()
-        
-        #bar = remote_tqdm.remote(total= len(self.Pset))
-        #futures = [compute_reachable.remote(node_idx, bar) for node_idx in range(len(self.Pset))]
-
+        ray.init()
         futures = [compute_reachable.remote(node_idx) for node_idx in range(len(self.Pset))]
-        
-        self.reachable = []
-        for res in tqdm(ray.get(futures), total=len(self.Pset), desc="Processing"):
-            self.reachable.append(res)
-
-        #bar.remote.close()
+        self.reachable = ray.get(futures)
         ray.shutdown()
     
     def sample_pset(self):
