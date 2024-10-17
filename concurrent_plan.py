@@ -128,14 +128,18 @@ class Robot_Plan:
                         break
 
     def start(self):
-        planning_thread = threading.Thread(target=self.plan)
+        self.plan()
+
         execution_thread = threading.Thread(target=self.execute)
-        
-        planning_thread.start()
         execution_thread.start()
-        
-        planning_thread.join()
+
+        while not self.goal_reached:
+            print("Re-planning for next steps...")
+            self.plan()
+
+        # Wait for execution thread to finish
         execution_thread.join()
+
 
 if __name__ == '__main__':
     robot_controller = Robot_Plan()
