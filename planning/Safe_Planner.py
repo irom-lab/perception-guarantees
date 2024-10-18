@@ -106,8 +106,8 @@ class World:
 class Safe_Planner:
     def __init__(self,
                  world_box: np.ndarray = np.array([[0,0],[8,8]]), # world dimensions ([x_min, y_min], [x_max, y_max])
-                 vx_range: list = [-0.5,0.5], # velocity ranges
-                 vy_range: list = [0,1],
+                 vx_range: list = [-0.75,0.75], # velocity ranges
+                 vy_range: list = [0,2],
                  sr: float = 1.0, # initial clearance
                  init_state: list = [4,1,0,0.5], # initial state [x,y,vx,vy]
                  goal_f: list = [7,-2,0.5,0], # goal location with forrestal coordinates

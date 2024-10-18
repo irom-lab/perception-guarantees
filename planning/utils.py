@@ -151,6 +151,7 @@ def filter_reachable(state: np.ndarray, state_set: list, r, vx_range, vy_range, 
         box = backward_box
     
     rip = 0
+    yay = 0
 
     xmax, ymax, xmin, ymin= box(state,r,vx_range,vy_range)
     state_set_filtered = []
@@ -170,21 +171,27 @@ def filter_reachable(state: np.ndarray, state_set: list, r, vx_range, vy_range, 
                         x,u = gen_trajectory(state, state_i, time, dt)
                     elif direction == 'B':
                         x,u = gen_trajectory(state_i, state, time, dt)
-                    if (np.all(np.logical_or.reduce((np.logical_and(u[:,0] >= -1.5, u[:,0] <= -0.19),
-                                                    u[:,0]==0,
-                                                    np.logical_and(u[:,0] >= 0.19, u[:,0] <= 1.5)))) 
-                        and np.all(np.logical_or(u[:,0]==0,
-                                                 np.logical_and(u[:,1] >= 0.19, u[:,1] <= 1.5))) 
-                        and np.all(min(vx_range)-0.1<=x[:,2]) and np.all(x[:,2]<=max(vx_range)+0.1)
-                        and np.all(min(vy_range)-0.1<=x[:,3]) and np.all(x[:,3]<=max(vy_range)+0.1)
-                        and np.all(0<=x[:,0]) and np.all(x[:,0]<=8) and np.all(0<=x[:,1]) and np.all(x[:,1]<18)):
-                        state_set_filtered.append(idx)
-                        cost_set_filtered.append(cost)
-                        time_set_filtered.append(time)
-                        traj_set_filtered.append((x,u))
-                    else:
-                        rip += 1
-    print('rip',rip)
+                    # if (np.all(np.logical_or.reduce((np.logical_and(u[:,0] >= -2, u[:,0] <= -0.19),
+                    #                                 u[:,0]==0,
+                    #                                 np.logical_and(u[:,0] >= 0.19, u[:,0] <= 2)))) 
+                    #     and np.all(np.logical_or(u[:,0]==0,
+                    #                              np.logical_and(u[:,1] >= 0.19, u[:,1] <= 2))) 
+                    #     and np.all(min(vx_range)-0.3<=x[:,2]) and np.all(x[:,2]<=max(vx_range)+0.3)
+                    #     and np.all(min(vy_range)-0.3<=x[:,3]) and np.all(x[:,3]<=max(vy_range)+0.3)
+                    #     and np.all(0<=x[:,0]) and np.all(x[:,0]<=8) and np.all(0<=x[:,1]) and np.all(x[:,1]<18)):
+                    #     state_set_filtered.append(idx)
+                    #     cost_set_filtered.append(cost)
+                    #     time_set_filtered.append(time)
+                    #     traj_set_filtered.append((x,u))
+                    #     yay += 1
+                    # else:
+                    #     rip += 1
+                    state_set_filtered.append(idx)
+                    cost_set_filtered.append(cost)
+                    time_set_filtered.append(time)
+                    traj_set_filtered.append((x,u))
+                    yay += 1
+    print('rip: ',rip, 'yay: ', yay)
     return state_set_filtered, cost_set_filtered, time_set_filtered, traj_set_filtered
 
 
