@@ -155,6 +155,9 @@ class Robot_Plan:
         new_plan = self.sp.plan(state, boxes)
         t_4 = time.time()
         print(f"Planning time: {t_4 - t_3}")
+        
+        if self.current_plan is not None:
+            self.sp.show(self.current_plan, boxes)
 
         with self.lock:
             self.next_plan = new_plan
