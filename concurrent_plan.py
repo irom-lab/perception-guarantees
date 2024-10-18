@@ -39,6 +39,7 @@ class Robot_Plan:
         # ****************************************************
 
         self.goal_reached = False
+        self.count_used_last_plan = 1
 
         f = open(self.reachable_file, 'rb')
         self.reachable = pickle.load(f)
@@ -83,20 +84,25 @@ class Robot_Plan:
         return boxes_new
 
     def transform_plan(self, arr):
-        #print("input array", arr)
+        print("input array", arr)
         if len(arr) == 0:
+            print(self.last_plan[2])
             if len(self.last_plan[2]) > 1:
                 alternative_plan = np.vstack(self.last_plan[2])
             else:
-                alternative_plan = self.last_plan[2]
-            #print(alternative_plan)
-            policy_before_transformation = alternative_plan[20:]
+                alternative_plan = np.array(self.last_plan[2])
+
+            print("alt plan", alternative_plan)
+            policy_before_transformation = alternative_plan[20*self.count_used_last_plan:]
+            self.count_used_last_plan += 1
             #print("before transform,", policy_before_transformation)
         elif len(arr) > 1:
             policy_before_transformation = np.vstack(arr)
+            print("when length >1")
         else:
-            policy_before_transformation = np.array(arr)
-        #print("before transform", policy_before_transformation)
+            print("when else")
+            policy_before_transformation = np.array(arr)[0]
+        print("before transform", policy_before_transformation)
         policy = (np.array([[0,1],[-1,0]])@policy_before_transformation.T).T
         #print("post transform", policy)
 
@@ -121,16 +127,20 @@ class Robot_Plan:
         print("starting planning !!!!!")
         
         with self.lock:
-            if self.current_plan is not None:
-                if len(self.current_plan[1]) > 1:
-                    print("current plan", self.current_plan[1])
-                    if len(self.current_plan[1]) > 1:
-                        future_state = np.vstack(self.current_plan[1])[19]
-                    else:
-                        future_state = self.current_plan[1][19]
-                    state = self.state_to_planner(future_state)
+            if self.current_plan is None:
+                future_state = self.go1.get_state()[0]
+            elif len(self.current_plan[1]) > 1:
+                print("current plan, length > 1", self.current_plan[1])
+                union_plans = np.vstack(self.current_plan[1])
+                print("union plans", union_plans)
+                future_state = union_plans[min(19, len(union_plans)-1)]
+            elif len(self.current_plan[1]) == 1:
+                print("current plan, length == 1", self.current_plan[1][0])
+                future_state = self.current_plan[1][0][min(19, len(self.current_plan[1][0])-1)]
             else:
-                state = self.state_to_planner(self.go1.get_state()[0])
+                print("current plan 0,", self.current_plan[1])
+                future_state = self.go1.get_state()[0]
+            state = self.state_to_planner(future_state)
 
         
         print("predicted/real state: ", state)
@@ -179,8 +189,11 @@ class Robot_Plan:
                 # Mark that execution is finished and ready for a new plan
                 self.executing = False
                 self.plan_ready.clear()
-                self.last_plan = self.current_plan
-                self.current_plan = None
+                with self.lock:
+                    if self.current_plan is not None:
+                        self.last_plan = self.current_plan
+                        self.count_used_last_plan = 1
+                    self.current_plan = None
 
 
 
