@@ -103,7 +103,8 @@ class Go1_move():
         return vx, vy
 
     def check_goal(self):
-        if (np.abs(self.state[0] - self.goal[0]) < 1) and (np.abs(self.state[1] - self.goal[1]) < 1):
+        self.get_state()
+        if (np.abs(self.state[0] - self.goal[0]) < 1.5) and (np.abs(self.state[1] - self.goal[1]) < 1.5):
             print("AT GOAL! :)")
             self.stop()
 

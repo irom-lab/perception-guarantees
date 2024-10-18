@@ -361,6 +361,7 @@ class Safe_Planner:
             ax.plot(x_waypoints[:,0], x_waypoints[:,1], c='red', linewidth=1)
         ax.plot(self.Pset[self.goal_idx][0],self.Pset[self.goal_idx][1],'o')
         plt.show()
+        plt.savefig(f'images/{idx_solution}.png', dpi=300, bbox_inches='tight')
 
     # safety planning algorithm
     def plan(self, state, new_boxes):
