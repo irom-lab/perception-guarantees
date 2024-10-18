@@ -51,6 +51,7 @@ class Robot_Plan:
         self.sp.load_reachable(self.Pset, self.reachable)
         self.go1 = Go1_move(self.sp.goal_f, vicon=self.vicon, state_type=self.state_type, save_folder=self.result_dir)
 
+        self.last_plan = None
         self.current_plan = None
         self.next_plan = None
         self.lock = threading.Lock()
@@ -82,12 +83,23 @@ class Robot_Plan:
         return boxes_new
 
     def transform_plan(self, arr):
-        if len(arr) > 1:
+        #print("input array", arr)
+        if len(arr) == 0:
+            if len(self.last_plan[2]) > 1:
+                alternative_plan = np.vstack(self.last_plan[2])
+            else:
+                alternative_plan = self.last_plan[2]
+            #print(alternative_plan)
+            policy_before_transformation = alternative_plan[20:]
+            #print("before transform,", policy_before_transformation)
+        elif len(arr) > 1:
             policy_before_transformation = np.vstack(arr)
         else:
             policy_before_transformation = np.array(arr)
+        #print("before transform", policy_before_transformation)
         policy = (np.array([[0,1],[-1,0]])@policy_before_transformation.T).T
-        #print(policy)
+        #print("post transform", policy)
+
         return policy
 
     # def get_boxes(sp):
@@ -108,16 +120,18 @@ class Robot_Plan:
         # Perception + planning logic
         print("starting planning !!!!!")
         
-        if self.current_plan is not None:
-            print(self.current_plan[1])
-            #print(np.vstack(self.current_plan[1]))
-            if len(self.current_plan) > 1:
-                future_state = np.vstack(self.current_plan[1])[19]
+        with self.lock:
+            if self.current_plan is not None:
+                if len(self.current_plan[1]) > 1:
+                    print("current plan", self.current_plan[1])
+                    if len(self.current_plan[1]) > 1:
+                        future_state = np.vstack(self.current_plan[1])[19]
+                    else:
+                        future_state = self.current_plan[1][19]
+                    state = self.state_to_planner(future_state)
             else:
-                future_state = self.current_plan[1][19]
-            state = self.state_to_planner(future_state)
-        else:
-            state = self.state_to_planner(self.go1.get_state()[0])
+                state = self.state_to_planner(self.go1.get_state()[0])
+
         
         print("predicted/real state: ", state)
         t_1 = time.time()
@@ -165,6 +179,7 @@ class Robot_Plan:
                 # Mark that execution is finished and ready for a new plan
                 self.executing = False
                 self.plan_ready.clear()
+                self.last_plan = self.current_plan
                 self.current_plan = None
 
 
