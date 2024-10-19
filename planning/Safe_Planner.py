@@ -245,6 +245,8 @@ class Safe_Planner:
                                            int(np.floor(geom.length/self.radius)),False)]
         
         candidates = np.array(candidates)
+        print("PRINT CANDIDATES EMILY")
+        breakpoint()
 
         costs = []
         subgoal_idxs = []
@@ -260,16 +262,22 @@ class Safe_Planner:
         
         # compute cost to go and cost to come for each subgoal
         for subgoal_idx in subgoal_idxs:
-            if any([all(i == self.Pset[subgoal_idx][0:2]) for i in self.goal_explored]):
+            if tuple(self.Pset[subgoal_idx][0:2]) in self.goal_explored:
+                print(f"ALREADY EXPLORED {subgoal_idx}")
+                # breakpoint()
                 # this subgoal is already explored
                 costs.append(np.inf)
             else:
                 subgoal = self.Pset[subgoal_idx]
                 # cost to come
+                # print("check on cost to come")
+                # breakpoint()
                 self.goal_idx = subgoal_idx
                 if self.bool_unvisit[subgoal_idx]==False:
                     _, cost_to_come = self.solve(start_idx)
+                    print(f"Solved for {subgoal_idx}, found cost = {cost_to_come}")
                 else:
+                    print(f"Defaulted to inf for {subgoal_idx}")
                     cost_to_come = np.inf
                 # cost to go
                 self.goal_idx = self.n_samples
@@ -279,8 +287,16 @@ class Safe_Planner:
                     dist_to_go = np.inf
                 if dist_to_go <= 1.0: #goal radius
                     dist_to_go = 0
+                
+                # print("CHECK MATH EMILY")
+                # print(cost_to_come)
+                # print(dist_to_go)
+                # breakpoint()
                 # append
                 costs.append(cost_to_come + self.weight*dist_to_go/v)
+        
+        print("PRINT COSTS AND Subgoal_idx EMILY")
+        breakpoint()
 
         if all(np.isinf(costs)): # all goals explored
             return None, None
@@ -351,22 +367,24 @@ class Safe_Planner:
 
         return world_polygon.difference(occlusion_space)
 
-    def show(self, idx_solution, true_state, planned_state=None, true_boxes= None):
+    def show(self, idx_solution, true_state=None, planned_state=None, true_boxes= None):
         '''Plot solution'''
         fig, ax = self.world.show(true_boxes)
         if planned_state is not None:
             print("Planned from state", planned_state[0])
             plan_x, plan_y, _, _ = planned_state[0]
             ax.plot(plan_x, plan_y, 'o')
-        print("True state", true_state[0])
-        x, y, _, _ = true_state[0]
+        print(true_state)
+        if true_state is not None:
+            print("True state", true_state[0])
+            x, y, _, _ = true_state[0]
+            ax.plot(x, y, 'o')
         for i in range(len(idx_solution)-1):
             s0 = idx_solution[i] #idx
             s1 = idx_solution[i+1] #idx
             x_waypoints = self.reachable[s0][1][3][self.reachable[s0][1][0].index(s1)][0]
             ax.plot(x_waypoints[:,0], x_waypoints[:,1], c='red', linewidth=1)
         ax.plot(self.Pset[self.goal_idx][0],self.Pset[self.goal_idx][1],'o')
-        ax.plot(x, y, 'o')
         plt.show()
         
         return fig
@@ -432,19 +450,32 @@ class Safe_Planner:
 
         # solve
         goal_flag = self.build_tree(start_idx)
-        self.goal_explored = []
+        self.goal_explored = set()
         if goal_flag == 1: # plan found
+            print("found goal so in here")
+            breakpoint()
             idx_solution, _ = self.solve(start_idx) 
         else: # no plan, explore intermediate goals
             while goal_flag == 0:
+                self.goal_explored = set()
                 goal_loc = self.goal_inter(start_idx)
                 print('intermediate goal, ', self.goal_idx)
                 if goal_loc is None or self.goal_idx == self.n_samples:
+                    # Direct to Goal found
+                    print("in here aAAAAA")
+                    breakpoint()
                     goal_flag = -1
+                    # I want to try this thing where it connects, but its not always in reachable
+                    # but the issue with this is sometimes start_idx doesnt reach to self.goal_idx
+                    # not quite sure how to resolve this
+                    #idx_solution = [start_idx, self.goal_idx]
                     idx_solution = [self.goal_idx]
                     break
                 else:
-                    self.goal_explored.append(self.Pset[self.goal_idx][0:2])
+                    # Take Intermediate Goal
+                    print("in here BBBBB")
+                    breakpoint()
+                    self.goal_explored.add(tuple(self.Pset[self.goal_idx][0:2]))
                     if self.bool_unvisit[self.goal_idx]==False:
                         idx_solution, _ = self.solve(start_idx)
                         break
@@ -452,13 +483,23 @@ class Safe_Planner:
         # output controls
         x_waypoints = []
         u_waypoints = []
+
+        # NOT GETTING IN THE LOOP WHEN THE LENGTH OF THE INDEX SOLUTION IS 1
+        # BECAUSE IT GOES STRAIGHT TO THE GOAL
+        # SO THERES NO WAYPOINTS OH MY GOSH
+        # if len(idx_solution) == 1:
+        #     idx_solution.insert(0, start_idx)
+        breakpoint()
         for i in range(len(idx_solution)-1):
+            print("GOT IN HERE FINDING SOLUTION")
             s0 = idx_solution[i] #idx
             s1 = idx_solution[i+1] #idx
+            breakpoint()
             x_waypoint, u_waypoint = self.reachable[s0][1][3][self.reachable[s0][1][0].index(s1)]
             x_waypoints.append(x_waypoint)
             u_waypoints.append(u_waypoint)
-
+        print("PAUSE")
+        breakpoint()
         return idx_solution, x_waypoints, u_waypoints
 
     def build_tree(self, start_idx):

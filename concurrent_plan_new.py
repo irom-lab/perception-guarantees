@@ -156,15 +156,15 @@ class Robot_Plan:
         with self.lock:
             if self.current_plan is None or len(self.current_plan[1])==0:
                 # Currently no plan in place -- must use true state
-                future_state = self.go1.get_state()[0]
+                plan_state = self.go1.get_state()[0]
             else:
                 # Combine all trajectories into one large trajectory
                 combined_trajectory = np.vstack(self.current_plan[1]) if len(self.current_plan[1]) > 1 else np.array(self.current_plan[1])
 
                 # Select the future state from the combined trajectory, up to the self.execution_steps th element (ex. 2s later) or the last element
-                future_state = combined_trajectory[min(self.execution_steps-1, len(combined_trajectory) - 1)]
+                plan_state = combined_trajectory[min(self.execution_steps-1, len(combined_trajectory) - 1)]
             
-            state_to_plan_from = self.state_to_planner(future_state)
+            state_to_plan_from = self.state_to_planner(plan_state)
 
         true_state = self.state_to_planner(self.go1.get_state()[0])
 
@@ -190,9 +190,9 @@ class Robot_Plan:
         t_4 = time.time()
         print(f"Planning time: {t_4 - t_3:.4f} seconds")
         
-        if new_plan[0] is not None:
+        if len(new_plan[0]) > 0:
             print('Saving figure...')
-            fig = self.sp.show(new_plan[0], true_state, planned_state = state_to_plan_from,true_boxes=None)
+            fig = self.sp.show(new_plan[0], true_state=true_state, planned_state=state_to_plan_from,true_boxes=None)
             plt.savefig(f'images/{t_4}.png', dpi=300, bbox_inches='tight')
 
         with self.lock:
@@ -249,9 +249,6 @@ class Robot_Plan:
                         self.last_plan = self.current_plan
                         self.count_used_last_plan = 1
                     self.current_plan = None
-
-
-
 
     def start(self):
         # Create an Event object to synchronize planning and execution
