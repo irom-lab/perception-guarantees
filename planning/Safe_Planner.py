@@ -245,8 +245,8 @@ class Safe_Planner:
                                            int(np.floor(geom.length/self.radius)),False)]
         
         candidates = np.array(candidates)
-        print("PRINT CANDIDATES EMILY")
-        breakpoint()
+        # print("PRINT CANDIDATES EMILY")
+        # breakpoint()
 
         costs = []
         subgoal_idxs = []
@@ -263,7 +263,7 @@ class Safe_Planner:
         # compute cost to go and cost to come for each subgoal
         for subgoal_idx in subgoal_idxs:
             if tuple(self.Pset[subgoal_idx][0:2]) in self.goal_explored:
-                print(f"ALREADY EXPLORED {subgoal_idx}")
+                #print(f"ALREADY EXPLORED {subgoal_idx}")
                 # breakpoint()
                 # this subgoal is already explored
                 costs.append(np.inf)
@@ -275,9 +275,9 @@ class Safe_Planner:
                 self.goal_idx = subgoal_idx
                 if self.bool_unvisit[subgoal_idx]==False:
                     _, cost_to_come = self.solve(start_idx)
-                    print(f"Solved for {subgoal_idx}, found cost = {cost_to_come}")
+                    #print(f"Solved for {subgoal_idx}, found cost = {cost_to_come}")
                 else:
-                    print(f"Defaulted to inf for {subgoal_idx}")
+                    #print(f"Defaulted to inf for {subgoal_idx}")
                     cost_to_come = np.inf
                 # cost to go
                 self.goal_idx = self.n_samples
@@ -295,8 +295,8 @@ class Safe_Planner:
                 # append
                 costs.append(cost_to_come + self.weight*dist_to_go/v)
         
-        print("PRINT COSTS AND Subgoal_idx EMILY")
-        breakpoint()
+        # print("PRINT COSTS AND Subgoal_idx EMILY")
+        # breakpoint()
 
         if all(np.isinf(costs)): # all goals explored
             return None, None
@@ -452,8 +452,8 @@ class Safe_Planner:
         goal_flag = self.build_tree(start_idx)
         self.goal_explored = set()
         if goal_flag == 1: # plan found
-            print("found goal so in here")
-            breakpoint()
+            # print("found goal so in here")
+            # breakpoint()
             idx_solution, _ = self.solve(start_idx) 
         else: # no plan, explore intermediate goals
             while goal_flag == 0:
@@ -462,8 +462,8 @@ class Safe_Planner:
                 print('intermediate goal, ', self.goal_idx)
                 if goal_loc is None or self.goal_idx == self.n_samples:
                     # Direct to Goal found
-                    print("in here aAAAAA")
-                    breakpoint()
+                    # print("in here aAAAAA")
+                    # breakpoint()
                     goal_flag = -1
                     # I want to try this thing where it connects, but its not always in reachable
                     # but the issue with this is sometimes start_idx doesnt reach to self.goal_idx
@@ -473,12 +473,14 @@ class Safe_Planner:
                     break
                 else:
                     # Take Intermediate Goal
-                    print("in here BBBBB")
-                    breakpoint()
+                    # print("in here BBBBB")
+                    # breakpoint()
                     self.goal_explored.add(tuple(self.Pset[self.goal_idx][0:2]))
                     if self.bool_unvisit[self.goal_idx]==False:
                         idx_solution, _ = self.solve(start_idx)
                         break
+        
+        self.show_connection(idx_solution)
 
         # output controls
         x_waypoints = []
@@ -489,18 +491,43 @@ class Safe_Planner:
         # SO THERES NO WAYPOINTS OH MY GOSH
         # if len(idx_solution) == 1:
         #     idx_solution.insert(0, start_idx)
-        breakpoint()
+        # breakpoint()
         for i in range(len(idx_solution)-1):
-            print("GOT IN HERE FINDING SOLUTION")
+            #print("GOT IN HERE FINDING SOLUTION")
             s0 = idx_solution[i] #idx
             s1 = idx_solution[i+1] #idx
-            breakpoint()
+            # breakpoint()
             x_waypoint, u_waypoint = self.reachable[s0][1][3][self.reachable[s0][1][0].index(s1)]
             x_waypoints.append(x_waypoint)
             u_waypoints.append(u_waypoint)
-        print("PAUSE")
-        breakpoint()
+        # print("PAUSE")
+        # breakpoint()
         return idx_solution, x_waypoints, u_waypoints
+    
+    def show_connection(self, idx_solution):
+        '''Plot connected tree, solution, and world'''
+        fig, ax = self.world.show()
+        ax.set_aspect('equal')
+        for i in range(self.n_samples):
+            ax.scatter(self.Pset[i][0],self.Pset[i][1], s=1, color = 'k',marker = '.')
+        for i in range(self.n_samples):
+            if self.parent[i] != i:
+                # s1 = i #idx
+                s0 = self.parent[i] #idx
+                # Ginv = self.reachable[i][2][3][self.reachable[i][2][0].index(s0)]
+                # show_trajectory(ax, self.Pset[s0], self.Pset[i],self.time[i],self.dt)
+                x_waypoints = self.reachable[s0][1][3][self.reachable[s0][1][0].index(i)][0]
+                ax.plot(x_waypoints[:,0], x_waypoints[:,1], c='gray', linewidth=0.5)
+        for i in range(len(idx_solution)-1):
+            s0 = idx_solution[i] #idx
+            s1 = idx_solution[i+1] #idx
+            # Ginv = self.reachable[s1][2][3][self.reachable[s1][2][0].index(s0)]
+            # show_trajectory(ax, self.Pset[s0],self.Pset[s1],self.time[s1],self.dt, c_ = 'red', linewidth_ = 1)
+            x_waypoints = self.reachable[s0][1][3][self.reachable[s0][1][0].index(s1)][0]
+            ax.plot(x_waypoints[:,0], x_waypoints[:,1], c='red', linewidth=1)
+        ax.plot(self.Pset[self.goal_idx][0],self.Pset[self.goal_idx][1],'o')
+        plt.show()
+
 
     def build_tree(self, start_idx):
         '''Builds tree for FMT*'''

@@ -40,8 +40,8 @@ class Robot_Plan:
 
         # ****************************************************
         # INITIALIZE SAFE PLANNER AND GO1
-        reachable_file = 'planning/pre_compute/reachable_15_10_1.5K.pkl'
-        pset_file = 'planning/pre_compute/Pset_15_10_1.5k.pkl'
+        reachable_file = 'planning/pre_compute/reachable_1.5_7_2K_ramp_filtered.pkl'
+        pset_file = 'planning/pre_compute/Pset_1.5_7_2K_ramp_unfiltered.pkl'
         f = open(reachable_file, 'rb')
         self.reachable = pickle.load(f)
         f = open(pset_file, 'rb')
