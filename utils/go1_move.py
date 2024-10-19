@@ -119,9 +119,10 @@ class Go1_move():
     def move(self, action):
         ux, uy = action
         # check ux, uy fall between -1, 1
-        bound = 0.8 # TODO: change back to 1
+        bound = 1.5 # TODO: change back to 1
         ux = max(-bound, min(ux, bound))
         uy = max(-bound, min(uy, bound))
+
         if np.abs(ux) < 0.2 and np.abs(ux) > 0.1:
             ux = ux / np.abs(ux) * 0.15
         if np.abs(uy) < 0.2 and np.abs(uy) > 0.1:
