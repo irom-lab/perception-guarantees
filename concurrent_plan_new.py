@@ -109,7 +109,7 @@ class Robot_Plan:
                 
                 # Check if the starting index exceeds the length of the alternative plan
                 if start_index >= len(alternative_plan):
-                    print("No more steps available in the last plan. Returning None.")
+                    print("No more steps available in the alternative plan. Returning None.")
                     return None
 
                 # Extract remaining steps
@@ -192,8 +192,7 @@ class Robot_Plan:
         
         if new_plan[0] is not None:
             print('Saving figure...')
-            curr_state= self.state_to_planner(self.go1.get_state()[0])
-            fig = self.sp.show(new_plan[0], curr_state, true_boxes=None)
+            fig = self.sp.show(new_plan[0], true_state, planned_state = state_to_plan_from,true_boxes=None)
             plt.savefig(f'images/{t_4}.png', dpi=300, bbox_inches='tight')
 
         with self.lock:

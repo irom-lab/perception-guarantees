@@ -351,12 +351,15 @@ class Safe_Planner:
 
         return world_polygon.difference(occlusion_space)
 
-    def show(self, idx_solution, state, true_boxes= None):
+    def show(self, idx_solution, true_state, planned_state=None, true_boxes= None):
         '''Plot solution'''
         fig, ax = self.world.show(true_boxes)
-        print("STATE HERE CHECK STATE HERE----------")
-        print(state[0])
-        x, y, vx, vy = state[0]
+        if planned_state is not None:
+            print("Planned from state", planned_state[0])
+            plan_x, plan_y, _, _ = planned_state[0]
+            ax.plot(plan_x, plan_y, 'o')
+        print("True state", true_state[0])
+        x, y, _, _ = true_state[0]
         for i in range(len(idx_solution)-1):
             s0 = idx_solution[i] #idx
             s1 = idx_solution[i+1] #idx
