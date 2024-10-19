@@ -119,7 +119,7 @@ class Safe_Planner:
                  FoV_range = 5, # can't see beyond 5 meters
                  FoV_close = 1, # can't see within 1 meters
                  n_samples = 2000,
-                 max_search_iter = 1000,
+                 max_search_iter = 1500,
                  weight = 10,  # weight for cost to go vs. cost to come
                  seed = 0,
                  speed = 0.5):
@@ -351,21 +351,29 @@ class Safe_Planner:
 
         return world_polygon.difference(occlusion_space)
 
-    def show(self,idx_solution, true_boxes = None):
+    def show(self, idx_solution, state, true_boxes= None):
         '''Plot solution'''
         fig, ax = self.world.show(true_boxes)
+        print("STATE HERE CHECK STATE HERE----------")
+        print(state[0])
+        x, y, vx, vy = state[0]
         for i in range(len(idx_solution)-1):
             s0 = idx_solution[i] #idx
             s1 = idx_solution[i+1] #idx
             x_waypoints = self.reachable[s0][1][3][self.reachable[s0][1][0].index(s1)][0]
             ax.plot(x_waypoints[:,0], x_waypoints[:,1], c='red', linewidth=1)
         ax.plot(self.Pset[self.goal_idx][0],self.Pset[self.goal_idx][1],'o')
+        ax.plot(x, y, 'o')
         plt.show()
-        plt.savefig(f'images/{idx_solution}.png', dpi=300, bbox_inches='tight')
+        
+        return fig
 
     # safety planning algorithm
-    def plan(self, state, new_boxes):
+    def plan(self, state, new_boxes, actual_state=None):
         '''Main function for safety planner'''
+
+        if actual_state is None:
+            actual_state = state
 
         if state.shape == (4,):
             state = state.reshape(1,4)
@@ -390,7 +398,7 @@ class Safe_Planner:
                                   [self.world_box[0,0],sense_range]])
         
         if contains_xy(self.world.free_space, x=[state[0,0]], y=[state[0,1]]): # currently in free space
-            self.world.free_space_new = self.occlusion(state[0,:])
+            self.world.free_space_new = self.occlusion(actual_state[0,:])
             if self.world.free_space_new is not None:
                 self.world.free_space_new = self.world.free_space_new.difference(tooclose)
                 self.world.free_space_new = self.world.free_space_new.difference(toofar)
@@ -427,6 +435,7 @@ class Safe_Planner:
         else: # no plan, explore intermediate goals
             while goal_flag == 0:
                 goal_loc = self.goal_inter(start_idx)
+                print('intermediate goal, ', self.goal_idx)
                 if goal_loc is None or self.goal_idx == self.n_samples:
                     goal_flag = -1
                     idx_solution = [self.goal_idx]

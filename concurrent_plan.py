@@ -20,14 +20,14 @@ class Robot_Plan:
         self.replan = True # set if want to just follow open loop plan
         self.save_traj = False  # set if want to save trajectory and compare against plan
         self.plot_traj = True  # set if want to visualize trajectory at the end of execution
-        self.goal_forrestal = [7.0, 0.0, 0.0, 0.5] # goal in forrestal coordinates
-        self.reachable_file = 'planning/pre_compute/reachable_1_10.pkl'
-        self.pset_file = 'planning/pre_compute/Pset_1_10.pkl'
-        self.num_samples = 1050  # number of samples used for the precomputed files
+        self.goal_forrestal = [7.0, 0.0, 0.0, 1.5] # goal in forrestal coordinates
+        self.reachable_file = 'planning/pre_compute/reachable_15_10_1.5K.pkl'
+        self.pset_file = 'planning/pre_compute/Pset_15_10_1.5k.pkl'
+        self.num_samples = 1530  # number of samples used for the precomputed files
         self.dt = 0.1 #   planner dt
         self.radius = 0.7 # distance between intermediate goals on the frontier
         self.chairs = [1, 2, 3, 4,5,6, 7, 8, 9, 10, 11, 12]  # list of chair labels to be used to get ground truth bounding boxes
-        self.num_detect = 15  # number of boxes for 3DETR to detect
+        self.num_detect = 5  # number of boxes for 3DETR to detect
         self.robot_radius = 0.14
         self.cp = 0.02 # 0.73 # 0.61 #0.02
         self.sensor_dt = 0.8 # time in seconds to replan
@@ -36,6 +36,7 @@ class Robot_Plan:
         #result_dir = 'results/supplementary_middle_goal_dt_08_cp002/' # set to unique trial identifier if saving results
         self.result_dir = None
         self.is_finetune = False
+        self.speed = 1.5
         # ****************************************************
 
         self.goal_reached = False
@@ -46,7 +47,9 @@ class Robot_Plan:
         f = open(self.pset_file, 'rb')
         self.Pset = pickle.load(f)
 
-        self.sp = Safe_Planner(goal_f=self.goal_forrestal, sensor_dt=self.sensor_dt, dt=self.dt, n_samples=self.num_samples, radius=self.radius, max_search_iter=self.max_search_iter, speed=1)
+        self.num_samples = len(self.Pset) - 1
+
+        self.sp = Safe_Planner(speed=self.speed, goal_f=self.goal_forrestal, sensor_dt=self.sensor_dt, dt=self.dt, n_samples=self.num_samples, radius=self.radius, max_search_iter=self.max_search_iter)
         print("goal (planner coords): ", self.sp.goal)
 
         self.sp.load_reachable(self.Pset, self.reachable)
@@ -95,7 +98,7 @@ class Robot_Plan:
             print("alt plan", alternative_plan)
             policy_before_transformation = alternative_plan[20*self.count_used_last_plan:]
             self.count_used_last_plan += 1
-            #print("before transform,", policy_before_transformation)
+            print("before transform after using alternative plan,", policy_before_transformation)
         elif len(arr) > 1:
             policy_before_transformation = np.vstack(arr)
             print("when length >1")
@@ -142,6 +145,8 @@ class Robot_Plan:
                 future_state = self.go1.get_state()[0]
             state = self.state_to_planner(future_state)
 
+        actual_state=  self.state_to_planner(self.go1.get_state()[0])
+
         
         print("predicted/real state: ", state)
         t_1 = time.time()
@@ -152,12 +157,18 @@ class Robot_Plan:
         boxes = self.boxes_to_planner_frame(boxes)
         t_3 = time.time()
         print(f"Box transformation time: {t_3 - t_2}")
-        new_plan = self.sp.plan(state, boxes)
+        self.sp.goal_explored = []
+        new_plan = self.sp.plan(state, boxes, actual_state)
+        print("length of planned trajectory--------")
+        print(len(new_plan[2]))
         t_4 = time.time()
         print(f"Planning time: {t_4 - t_3}")
         
-        if self.current_plan is not None:
-            self.sp.show(self.current_plan, boxes)
+        if new_plan[0] is not None:
+            print('saving fig')
+            curr_state= self.state_to_planner(self.go1.get_state()[0])
+            fig = self.sp.show(new_plan[0], curr_state, true_boxes=None)
+            plt.savefig(f'images/{t_4}.png', dpi=300, bbox_inches='tight')
 
         with self.lock:
             self.next_plan = new_plan
