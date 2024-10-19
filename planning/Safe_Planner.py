@@ -371,8 +371,8 @@ class Safe_Planner:
         '''Plot solution'''
         fig, ax = self.world.show(true_boxes)
         if planned_state is not None:
-            print("Planned from state", planned_state[0])
-            plan_x, plan_y, _, _ = planned_state[0]
+            print("Planned from state", planned_state)
+            plan_x, plan_y, _, _ = planned_state
             ax.plot(plan_x, plan_y, 'o')
         print(true_state)
         if true_state is not None:
@@ -480,7 +480,7 @@ class Safe_Planner:
                         idx_solution, _ = self.solve(start_idx)
                         break
         
-        self.show_connection(idx_solution)
+        #self.show_connection(idx_solution)
 
         # output controls
         x_waypoints = []

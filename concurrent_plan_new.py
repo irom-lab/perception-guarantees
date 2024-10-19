@@ -25,7 +25,7 @@ class Robot_Plan:
         dt = 0.1 #   planner dt
         radius = 0.7 # distance between intermediate goals on the frontier
         chairs = [1, 2, 3, 4,5,6, 7, 8, 9, 10, 11, 12]  # list of chair labels to be used to get ground truth bounding boxes
-        self.num_detect = 5  # number of boxes for 3DETR to detect
+        self.num_detect = 8  # number of boxes for 3DETR to detect
         robot_radius = 0.14
         self.cp = 0.02 # 0.73 # 0.61 #0.02
         sensor_dt = 0.8 # time in seconds to replan
@@ -156,21 +156,19 @@ class Robot_Plan:
         with self.lock:
             if self.current_plan is None or len(self.current_plan[1])==0:
                 # Currently no plan in place -- must use true state
-                plan_state = self.go1.get_state()[0]
+                plan_state = self.state_to_planner(self.go1.get_state()[0])
             else:
                 # Combine all trajectories into one large trajectory
                 combined_trajectory = np.vstack(self.current_plan[1]) if len(self.current_plan[1]) > 1 else np.array(self.current_plan[1])
 
                 # Select the future state from the combined trajectory, up to the self.execution_steps th element (ex. 2s later) or the last element
                 plan_state = combined_trajectory[min(self.execution_steps-1, len(combined_trajectory) - 1)]
-            
-            state_to_plan_from = self.state_to_planner(plan_state)
 
         true_state = self.state_to_planner(self.go1.get_state()[0])
 
         
         # Log the state from which planning will start
-        print("State to plan from: ", state_to_plan_from)
+        print("State to plan from: ", plan_state)
 
         # Step 1: Object detection using the camera
         t_1 = time.time()
@@ -186,14 +184,14 @@ class Robot_Plan:
 
         # Step 3: Clear explored goals and perform new planning
         self.sp.goal_explored = []
-        new_plan = self.sp.plan(state_to_plan_from, boxes, true_state)
+        new_plan = self.sp.plan(plan_state, boxes, true_state)
         t_4 = time.time()
         print(f"Planning time: {t_4 - t_3:.4f} seconds")
         
-        if len(new_plan[0]) > 0:
-            print('Saving figure...')
-            fig = self.sp.show(new_plan[0], true_state=true_state, planned_state=state_to_plan_from,true_boxes=None)
-            plt.savefig(f'images/{t_4}.png', dpi=300, bbox_inches='tight')
+        # if len(new_plan[0]) > 0:
+        #     print('Saving figure...')
+        #     fig = self.sp.show(new_plan[0], true_state=true_state, planned_state=plan_state,true_boxes=None)
+        #     plt.savefig(f'images/{t_4}.png', dpi=300, bbox_inches='tight')
 
         with self.lock:
             self.next_plan = new_plan

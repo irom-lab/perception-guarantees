@@ -168,7 +168,7 @@ class Zed:
 
         return yaw
 
-    def get_boxes(self, cp=0.4, num_boxes=10, is_finetune=False):
+    def get_boxes(self, cp=0.4, num_boxes=5, is_finetune=False):
         # Get pointcloud
         # self.zed.retrieve_measure(self.pc, sl.MEASURE.XYZRGBA,sl.MEM.CPU, res)
 
